@@ -202,23 +202,12 @@ function activeSection(s) {
         ".cm-line.cm-active:not(.HyperMD-header):not(.HyperMD-list-line)"
       );
     }
-    if (s.activeLineHeading) {
-      selectors.push(".cm-line.cm-active.HyperMD-header");
-    }
     if (selectors.length > 0) {
       parts.push(rule(selectors.join(",\n"), { color: colour2 }));
     }
-    if (s.activeLineHeading) {
-      parts.push(
-        rule(
-          ".cm-line.cm-active.HyperMD-header .cm-header,\n.cm-line.cm-active.HyperMD-header .cm-formatting-header",
-          { color: colour2 }
-        )
-      );
-    }
   }
   if (s.activeStrikeHideEnabled) {
-    const scope = s.activeLineHeading ? ".cm-line.cm-active" : ".cm-line.cm-active:not(.HyperMD-header)";
+    const scope = ".cm-line.cm-active:not(.HyperMD-header)";
     parts.push(
       rule(`${scope} .cm-strikethrough,
 ${scope} del`, {
@@ -773,11 +762,14 @@ var DEFAULT_SETTINGS = {
   activeLineColor: "#000000",
   activeLineList: true,
   activeLineParagraph: true,
-  // Off by default. A heading carries its own level colour, and flattening it
-  // to black the moment the caret lands on it erases that distinction --
-  // which reads as a bug rather than as a feature at the one moment you are
-  // trying to read the heading back.
-  activeLineHeading: false,
+  // There is deliberately no `activeLineHeading`. Headings carry their own
+  // level colour, and the active-line feature must not reach them: flattening
+  // a heading to black the moment the caret lands on it erases the one thing
+  // you are looking at. Making that a switch was tried and reverted -- a
+  // saved settings file pins the old value, so changing the default does not
+  // reach an existing install, and the feature kept coming back for anyone
+  // who had ever toggled anything. Removing it makes headings structurally
+  // immune instead of conditionally immune.
   activeStrikeHideEnabled: true,
   activeStrikeColor: "#000000",
   strikeHeadingGreyEnabled: true,
@@ -1199,12 +1191,6 @@ function textRows() {
     { kind: "color", key: "activeLineColor", name: "变成的颜色" },
     { kind: "toggle", key: "activeLineList", name: "对列表行生效" },
     { kind: "toggle", key: "activeLineParagraph", name: "对普通段落生效" },
-    {
-      kind: "toggle",
-      key: "activeLineHeading",
-      name: "对标题行生效",
-      desc: "默认关闭。标题自带一个层级颜色，光标一进去就把它压成黑色会盖掉这个区分 ——偏偏那一刻你正想看清楚这行是几级标题。打开后标题文字与 ## 标记都会跟着变黑。"
-    },
     {
       kind: "toggle",
       key: "activeStrikeHideEnabled",

@@ -380,6 +380,11 @@ function textSection(s: StyleToolkitSettings): string {
  * `.cm-line.cm-active .cm-strikethrough` is a descendant selector and therefore
  * genuinely more specific -- which is exactly why the bug looked so selective.)
  *
+ * HEADINGS ARE EXCLUDED, UNCONDITIONALLY
+ * --------------------------------------
+ * Nothing here may target `.HyperMD-header`. This used to be a setting, and the
+ * setting was the problem; the note inside the function explains why it is gone.
+ *
  * @param s - Settings.
  * @returns The section.
  */
@@ -387,6 +392,16 @@ function activeSection(s: StyleToolkitSettings): string {
 	const parts: Array<string | false> = [];
 	const colour = s.activeLineColor;
 
+	// Headings are excluded from this feature, and that is not configurable.
+	//
+	// It was a switch once. The problem is that a heading paints its colour
+	// onto the `.cm-header-N` span, and an explicit colour on an element beats
+	// one inherited from its line -- so the switch only did anything once the
+	// spans were targeted directly, and by then every existing install had
+	// `activeLineHeading: true` saved in its data file. Changing a default
+	// cannot reach an install that already stores the key, so the effect kept
+	// reappearing after upgrades. Excluding headings unconditionally removes
+	// the failure mode instead of configuring it.
 	if (s.activeLineEnabled) {
 		const selectors: string[] = [];
 		if (s.activeLineList) {
@@ -397,37 +412,13 @@ function activeSection(s: StyleToolkitSettings): string {
 				".cm-line.cm-active:not(.HyperMD-header):not(.HyperMD-list-line)"
 			);
 		}
-		if (s.activeLineHeading) {
-			selectors.push(".cm-line.cm-active.HyperMD-header");
-		}
 		if (selectors.length > 0) {
 			parts.push(rule(selectors.join(",\n"), { color: colour }));
-		}
-
-		// A heading paints its colour onto the `.cm-header-N` span, and an
-		// explicit colour on an element beats one inherited from its line. So
-		// colouring the line alone leaves heading text untouched, and the
-		// "headings too" option would do nothing visible. The spans have to be
-		// reached directly.
-		if (s.activeLineHeading) {
-			parts.push(
-				rule(
-					".cm-line.cm-active.HyperMD-header .cm-header,\n" +
-						".cm-line.cm-active.HyperMD-header .cm-formatting-header",
-					{ color: colour }
-				)
-			);
 		}
 	}
 
 	if (s.activeStrikeHideEnabled) {
-		// The heading option governs the whole feature for headings, not just
-		// the colour. Otherwise a struck-through heading would still be
-		// recoloured on the active line while the rest of it kept its level
-		// colour -- a half-applied rule, which looks like a bug.
-		const scope = s.activeLineHeading
-			? ".cm-line.cm-active"
-			: ".cm-line.cm-active:not(.HyperMD-header)";
+		const scope = ".cm-line.cm-active:not(.HyperMD-header)";
 		parts.push(
 			rule(`${scope} .cm-strikethrough,\n${scope} del`, {
 				"text-decoration": "none",

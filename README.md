@@ -100,9 +100,28 @@ Obsidian 自己是**用 `padding`（`--list-spacing`）做行距**的，不是 m
 >
 > 具体后果：在 v1.3.0 及更早版本里，**光标停在列表行上时文字不会变黑**（被层级灰压住了），而删除线却能变黑 —— 因为删除线那条是后代选择器（`.cm-line.cm-active .cm-strikethrough`），特异性真的更高。这个"只有一部分生效"的假象，正是顺序问题最难察觉的地方。
 
-还有一处相关的修复：标题的颜色是画在 `.cm-header-N` **span** 上的，而元素上的显式颜色**优先于从行继承的颜色** —— 所以只给行上色，标题文字永远不会变黑。现在「对标题行生效」会直接打到标题的 span 和 `##` 标记上。
+### 标题**不会**被「光标所在行」影响
 
-> 「对标题行生效」**默认关闭**。这个开关在修好之前一直是空转的（给行上色到不了标题文字），接通之后你才第一次真正看到它的效果。标题自带一个层级颜色，光标一进去就压成黑色会盖掉那个区分，所以默认不碰标题。想要就自己去打开 —— 打开后标题文字和 `##` 标记都会跟着变黑，删除线隐藏也一并作用于标题。
+「光标所在行文字变黑」和「隐藏删除线」这两项，对标题行**完全不起作用**，而且**没有开关** —— 这是刻意做成不可配置的。
+
+原因值得记下来，因为它踩了三次：
+
+1. 标题的颜色画在 `.cm-header-N` **span** 上，而元素上的显式颜色**优先于从行继承的颜色** —— 所以给**行**上色根本到不了标题文字。原来那个「对标题行生效」开关在接通 span 之前一直是**空转**的，开着也没效果。
+2. 为了让它"真的有用"而去打到 span 之后，问题变成了：**改默认值对已有安装无效**。插件每次保存都会把整个设置对象写进 `data.json`，只要那个键存在，`normalizeSettings` 就会沿用存储里的值，默认值只影响**全新安装**。于是"默认关闭"对任何动过设置的人都不生效，升级后标题照样变黑。
+3. 把开关留着，就等于把这个失败模式留着。
+
+所以最终**删掉了这个开关和对应的规则**，改成结构上不可能命中：
+
+```css
+.cm-line.cm-active.HyperMD-list-line,
+.cm-line.cm-active:not(.HyperMD-header):not(.HyperMD-list-line) { color: #000000 !important; }
+
+.cm-line.cm-active:not(.HyperMD-header) .cm-strikethrough, ... { ... }
+```
+
+整个小节里**没有任何以标题行为主体的选择器**，只有 `:not(.HyperMD-header)` 的**排除**。删掉开关还有一个附带好处：删除线隐藏以前即使关掉也会作用于标题（半生效，看起来像 bug），现在也一并排除了。
+
+> 这条经验是通用的：**改默认值不能修已有安装**。要让一个已经存在的行为消失，要么做数据迁移，要么把代码删掉。
 
 ### 和 CSS 片段一起用会怎样
 
@@ -183,7 +202,7 @@ Also removed: `代码块字体大小.css`, which set `--code-size: 0.5em` and ha
 
 The sheet leans on `!important`, but the rules that actually collide do so at *identical* specificity — three classes on each side — where `!important` settles nothing and the later rule simply wins. That is why the active-line rules sit in their own section second from the end: they have to beat the list-level greys, which tie with them, and the callout section has to come after *them* so the callout-scoped "fade the active line" beats the generic "make it black". In v1.3.0 and earlier the active list line therefore never turned black — while a struck-through line did, because `.cm-line.cm-active .cm-strikethrough` is a descendant selector and genuinely more specific. That "only some of it works" appearance is what makes an ordering bug hard to spot.
 
-Relatedly, heading colours are painted on the `.cm-header-N` *span*, and an explicit colour on an element beats one inherited from its line — so colouring the line alone could never turn heading text black. The "headings too" option now targets those spans (and the `##` marker spans) directly.
+Relatedly, heading colours are painted on the `.cm-header-N` *span*, and an explicit colour on an element beats one inherited from its line — so colouring the line could never turn heading text black. That was first "fixed" by targeting the spans, which turned a long-inert option into a visible effect nobody had asked for; the option was then defaulted to off, which did not help either, because **changing a default cannot reach an install that already has the key saved** — the plugin writes the whole settings object on every save, so an existing `data.json` pins the old value. The option and its rules are gone instead: `activeSection` excludes headings with `:not(.HyperMD-header)` and contains no selector whose subject is a heading line, so headings are structurally immune rather than conditionally immune. The same removal also stopped the strikethrough-hiding from reaching headings, which it previously did even with the option off.
 
 **Moving a section is a behaviour change, not a formatting one.**
 

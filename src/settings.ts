@@ -34,7 +34,6 @@ export interface StyleToolkitSettings {
 	activeLineColor: string;
 	activeLineList: boolean;
 	activeLineParagraph: boolean;
-	activeLineHeading: boolean;
 
 	activeStrikeHideEnabled: boolean;
 	activeStrikeColor: string;
@@ -230,11 +229,14 @@ export const DEFAULT_SETTINGS: StyleToolkitSettings = {
 	activeLineColor: "#000000",
 	activeLineList: true,
 	activeLineParagraph: true,
-	// Off by default. A heading carries its own level colour, and flattening it
-	// to black the moment the caret lands on it erases that distinction --
-	// which reads as a bug rather than as a feature at the one moment you are
-	// trying to read the heading back.
-	activeLineHeading: false,
+	// There is deliberately no `activeLineHeading`. Headings carry their own
+	// level colour, and the active-line feature must not reach them: flattening
+	// a heading to black the moment the caret lands on it erases the one thing
+	// you are looking at. Making that a switch was tried and reverted -- a
+	// saved settings file pins the old value, so changing the default does not
+	// reach an existing install, and the feature kept coming back for anyone
+	// who had ever toggled anything. Removing it makes headings structurally
+	// immune instead of conditionally immune.
 
 	activeStrikeHideEnabled: true,
 	activeStrikeColor: "#000000",

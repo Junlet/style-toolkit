@@ -124,14 +124,6 @@ function textRows(): Row[] {
 		{ kind: "toggle", key: "activeLineParagraph", name: "对普通段落生效" },
 		{
 			kind: "toggle",
-			key: "activeLineHeading",
-			name: "对标题行生效",
-			desc:
-				"默认关闭。标题自带一个层级颜色，光标一进去就把它压成黑色会盖掉这个区分 ——" +
-				"偏偏那一刻你正想看清楚这行是几级标题。打开后标题文字与 ## 标记都会跟着变黑。",
-		},
-		{
-			kind: "toggle",
 			key: "activeStrikeHideEnabled",
 			name: "光标所在行隐藏删除线",
 			desc: "在光标所在行把 ~~删除线~~ 的下划线去掉，只留下文字，编辑时不会被划线挡住。",
