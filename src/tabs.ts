@@ -329,12 +329,6 @@ function headingRows(): Row[] {
 			desc: "虚线一直延伸到右边距。H1 默认不画，用来拉开和下级标题的区别。",
 		},
 		{
-			kind: "toggle",
-			key: "dashHideOnActive",
-			name: "编辑时当前行不画虚线",
-			desc: "光标在标题行上时先不画，避免打字时文字跳动。",
-		},
-		{
 			kind: "slider",
 			key: "dashGapRatio",
 			name: "虚线间距（相对线宽的倍数）",

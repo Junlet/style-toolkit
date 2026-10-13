@@ -77,6 +77,16 @@ Obsidian 自己是**用 `padding`（`--list-spacing`）做行距**的，不是 m
 
 > 想要列表上方的间距，请在主题/外观里调 `--list-spacing`，或者干脆不要 —— 用 margin 加间距是行不通的。
 
+### 标题虚线只在「不是你正在编辑的那一行」生效
+
+实时预览里，标题尾部那条虚线需要把所在行变成 flex 容器。这件事**只在光标不在该行时**才做 —— 这个限定是必需的，不是装饰：
+
+一旦行变成 flex 容器，`##` 后面那个**空的**标题 span 就成了一个 flex item，而**空内容的 flex item 不产生行盒**。没有盒子，CodeMirror 就没地方画光标，光标会掉到文字下方。表现就是：**打到第二个 `#` 的瞬间光标跳走，第三个 `#` 打不出来，二级及更深的标题根本没法输入。**
+
+阅读视图不受影响 —— 那里的 `h1`~`h6` 是真正的块级元素，也没有光标。
+
+所以原来那个「编辑时当前行不画虚线」的开关**已经移除**：它不再是可选项，而是编辑器能正常工作的前提。
+
 ### 和 CSS 片段一起用会怎样
 
 会**双重叠加**。装了插件并把原来的片段也打开，同一套样式会被应用两次（虽然结果通常看不出来，因为值一样）。
@@ -145,10 +155,12 @@ A bundle of fifteen hand-written Obsidian CSS snippets, of which **thirteen** ar
 
 Settings are split across seven tabs — Overview (master switch, seven section gates, copy the generated CSS, reset), Text & emphasis, Lists, Headings & links, Callout, Code, and Interface. Nearly a hundred individual controls; the section gates live only on the Overview tab so that no two controls are ever bound to the same key.
 
-### Two snippets are deliberately not included
+### Two editor-safety rules
 
-- **`测试用.css` added `margin-top` to editor lines.** That breaks editing and selecting: CodeMirror's vertical position map is built by a `ResizeObserver` watching each line's *border box*, and a margin sits outside it, so the map is never told the space exists. Every list line makes the computed offset drift by another em, and the further down the document you go the worse the error — clicks land on neighbouring lines and selections come out shifted. Obsidian spaces lines with `padding` (`--list-spacing`) for exactly this reason. The plugin emits **no vertical margin on any editor line**, and a test asserts it.
-- **`代码块字体大小.css` set `--code-size: 0.5em`**, halving every piece of inline code. Code block sizing is a proper setting instead.
+- **No vertical margin on an editor line.** `测试用.css` added one, and it breaks editing: CodeMirror's vertical position map comes from a `ResizeObserver` watching each line's *border box*, and a margin sits outside it, so the map is never told the space exists. Every list line makes the computed offset drift by another em — the further down the document, the worse — so clicks land on neighbouring lines and selections come out shifted. Obsidian spaces lines with `padding` (`--list-spacing`) for the same reason.
+- **The heading leader only applies to the line you are *not* editing.** Building it needs `display: flex` on the line, and that is scoped to `:not(.cm-active)`. It has to be: an empty heading span inside a flex container generates no line box, so CodeMirror has no box to draw the caret in and it drops below the text — which made H2 and deeper headings impossible to type at all, because the caret fell away the moment the second `#` completed the marker. Reading view is unaffected (`hN` is a real block there). The old "hide the dash while editing" toggle is gone, since it is no longer optional.
+
+Also removed: `代码块字体大小.css`, which set `--code-size: 0.5em` and halved every piece of inline code. Code block sizing is a setting of its own, keeping its current 0.8em default.
 
 Every other default reproduces the snippet it replaces, so installing changes nothing you were already looking at. Three spots where the original snippets contradicted themselves were unified, and they are listed in the Chinese section above.
 

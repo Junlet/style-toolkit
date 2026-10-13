@@ -377,24 +377,21 @@ function headingSection(s) {
       parts.push(
         rule(`.markdown-preview-view h${level}`, {
           display: "flex",
-          "align-items": "center",
-          width: "100%"
+          "align-items": "center"
         }),
-        rule(`.markdown-preview-view h${level}::after`, after),
-        rule(`.cm-line:has(.cm-header-${level})`, {
+        rule(`.markdown-preview-view h${level}::after`, after)
+      );
+      parts.push(
+        rule(`.cm-line:has(.cm-header-${level}):not(.cm-active)`, {
           display: "flex",
-          "align-items": "center",
-          width: "100%"
+          "align-items": "center"
         }),
         rule(`.cm-line:has(.cm-header-${level}) > .cm-header-${level}`, {
           margin: "0",
           padding: "0",
           display: "inline"
-        })
-      );
-      const active = s.dashHideOnActive ? ":not(.cm-active)" : "";
-      parts.push(
-        rule(`.cm-line:has(.cm-header-${level})${active}::after`, after)
+        }),
+        rule(`.cm-line:has(.cm-header-${level}):not(.cm-active)::after`, after)
       );
     });
   }
@@ -815,7 +812,6 @@ var DEFAULT_SETTINGS = {
   ],
   dashThickness: [4, 4, 4, 3, 3, 2],
   dashGapRatio: 1,
-  dashHideOnActive: true,
   inlineTitleEnabled: true,
   inlineTitleFollowH1: true,
   inlineTitleColor: "#c0504d",
@@ -1359,12 +1355,6 @@ function headingRows() {
       key: "dashEnabled",
       name: "在标题后面画虚线",
       desc: "虚线一直延伸到右边距。H1 默认不画，用来拉开和下级标题的区别。"
-    },
-    {
-      kind: "toggle",
-      key: "dashHideOnActive",
-      name: "编辑时当前行不画虚线",
-      desc: "光标在标题行上时先不画，避免打字时文字跳动。"
     },
     {
       kind: "slider",

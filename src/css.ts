@@ -30,6 +30,16 @@
  *     with `padding` (`--list-spacing`) for exactly this reason.
  *   - `body { --code-size: 0.5em }`, which halved every piece of inline code.
  *     Code block sizing is exposed as its own setting instead.
+ *
+ * SCOPED TO THE INACTIVE LINE
+ * ---------------------------
+ * The Live Preview heading leader needs `display: flex` on the line, and that
+ * is scoped to `:not(.cm-active)`. The scoping is required, not cosmetic: an
+ * empty heading span inside a flex container generates no line box, so there is
+ * no box for CodeMirror to draw the caret in and it drops below the text. That
+ * made it impossible to type H2 and deeper headings at all -- the caret fell to
+ * the next line the moment the second `#` completed the marker. Reading view is
+ * unaffected because `hN` is a real block element there.
  */
 
 import type { StyleToolkitSettings } from "./settings";
@@ -554,30 +564,40 @@ function headingSection(s: StyleToolkitSettings): string {
 				"background-image": gradient,
 			};
 
+			// Reading view: `hN` is a real block element here, so making it a
+			// flex container is harmless -- there is no caret to place.
 			parts.push(
 				rule(`.markdown-preview-view h${level}`, {
 					display: "flex",
 					"align-items": "center",
-					width: "100%",
 				}),
-				rule(`.markdown-preview-view h${level}::after`, after),
-				rule(`.cm-line:has(.cm-header-${level})`, {
+				rule(`.markdown-preview-view h${level}::after`, after)
+			);
+
+			// Live Preview: both the flex container and the leader are scoped to
+			// the line you are NOT editing. That scoping is load-bearing, not
+			// cosmetic.
+			//
+			// Making `.cm-line` a flex container while the caret is inside it
+			// breaks typing. An empty `.cm-header-N` -- which is exactly what
+			// sits after the `##` you have just typed -- becomes a flex item,
+			// and a flex item with no content generates no line box at all. So
+			// there is no box for CodeMirror to draw the caret in, and the caret
+			// drops below the text. Typing a third `#` then lands nowhere.
+			//
+			// `:not(.cm-active)` limits the flex container to the headings you
+			// are not editing, which is every heading but one.
+			parts.push(
+				rule(`.cm-line:has(.cm-header-${level}):not(.cm-active)`, {
 					display: "flex",
 					"align-items": "center",
-					width: "100%",
 				}),
 				rule(`.cm-line:has(.cm-header-${level}) > .cm-header-${level}`, {
 					margin: "0",
 					padding: "0",
 					display: "inline",
-				})
-			);
-
-			// In Live Preview the leader is hidden on the line being edited, so
-			// the heading text does not jump while typing.
-			const active = s.dashHideOnActive ? ":not(.cm-active)" : "";
-			parts.push(
-				rule(`.cm-line:has(.cm-header-${level})${active}::after`, after)
+				}),
+				rule(`.cm-line:has(.cm-header-${level}):not(.cm-active)::after`, after)
 			);
 		});
 	}

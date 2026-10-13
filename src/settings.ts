@@ -92,7 +92,6 @@ export interface StyleToolkitSettings {
 	dashColors: string[];
 	dashThickness: number[];
 	dashGapRatio: number;
-	dashHideOnActive: boolean;
 
 	inlineTitleEnabled: boolean;
 	inlineTitleFollowH1: boolean;
@@ -303,7 +302,6 @@ export const DEFAULT_SETTINGS: StyleToolkitSettings = {
 	],
 	dashThickness: [4, 4, 4, 3, 3, 2],
 	dashGapRatio: 1,
-	dashHideOnActive: true,
 
 	inlineTitleEnabled: true,
 	inlineTitleFollowH1: true,
