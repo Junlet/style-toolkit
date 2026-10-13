@@ -49,6 +49,32 @@
  * the active-line rules (see `activeSection`) must come after the list and
  * heading colours, and the callout section must come after the active-line
  * rules. Moving a section is a behaviour change, not a cosmetic one.
+ *
+ * THE CASCADE LADDER
+ * ------------------
+ * Because everything carries `!important`, importance settles nothing between
+ * these rules: specificity decides, and document order breaks the ties. Two
+ * separate bugs came out of getting that wrong -- an option that silently did
+ * nothing, and the same feature behaving differently for list lines and
+ * paragraph lines inside a callout. So the ladder is written down here and
+ * asserted in the tests rather than trusted:
+ *
+ *   (0,2,0)  base line colour              `.cm-s-obsidian .cm-line`
+ *   (0,3,0)  list level colour             `...mod-cm6 .HyperMD-list-line-N`
+ *   (0,3,0)  active line, list             `.cm-line.cm-active.HyperMD-list-line`
+ *   (0,4,0)  active line, paragraph        `.cm-line.cm-active:not(..):not(..)`
+ *   (0,4,0)  callout list colour           `...mod-cm6 .callout .HyperMD-list-line-N`
+ *   (0,6,0)  active line inside a callout  `...mod-cm6 .callout .cm-line.cm-active:not(..)`
+ *
+ * The rule of thumb: a narrower context outranks a wider one, and a transient
+ * state outranks a resting one. A callout is narrower than the document; the
+ * line under the caret is more transient than a list level. Where two rules
+ * genuinely tie -- the active line against the list greyscale, both at
+ * (0,3,0) -- the later section wins.
+ *
+ * Within emphasis the ladder is italics < bold < strikethrough < bold+italics,
+ * and it is the same for plain text and for inline code. The original snippets
+ * used two different orders for those two cases; see `textSection`.
  */
 
 import { LIST_ROOT_CLASS } from "./listroot";
@@ -202,10 +228,15 @@ function readingListInner(
 }
 
 /**
- * Selector for list items inside a callout.
+ * Selector for list items inside a callout, in reading view.
  *
- * Scoped to `.callout` deliberately: these rules carry callout-only colours and
- * must not leak into the document's own lists.
+ * Scoped to `.callout`, and prefixed with `.markdown-preview-view`, for two
+ * different reasons: `.callout` keeps the callout-only colours out of the
+ * document's own lists, and the prefix is what lets these rules actually win
+ * over the global list greyscale. Without it the selector is
+ * `.callout ul > li` at (0,1,2), while the greyscale is
+ * `body .markdown-preview-view ul > li` at (0,1,3) -- so the callout's own
+ * colours would never be seen.
  *
  * @param kind - `ul` or `ol`.
  * @param level - Nesting depth, 1-based.
@@ -213,7 +244,7 @@ function readingListInner(
  */
 function calloutList(kind: "ul" | "ol", level: number): string {
 	const nest = new Array(level).fill(kind).join(" ");
-	return `.callout ${nest} > li`;
+	return `.markdown-preview-view .callout ${nest} > li`;
 }
 
 /**
@@ -298,6 +329,17 @@ function textSection(s: StyleToolkitSettings): string {
 	}
 
 	if (s.emphasisEnabled) {
+		// Order is the ladder, and it is the same ladder the inline-code block
+		// below uses. The original snippets were self-contradictory here: the
+		// plain-text block listed strikethrough first and italics last, so
+		// italics won, while the inline-code block did the opposite. One order
+		// now serves both:
+		//
+		//   italics < bold < strikethrough < bold+italics
+		//
+		// Strikethrough outranks a single other mark because it means the text
+		// is retracted and its colour is deliberately faint; a two-mark
+		// combination outranks any single mark because it is more specific.
 		parts.push(
 			rule(".cm-em,\n.markdown-preview-view em", {
 				color: s.emphasisItalicColor,
@@ -307,12 +349,12 @@ function textSection(s: StyleToolkitSettings): string {
 				color: s.emphasisBoldColor,
 				"font-weight": "bold",
 			}),
-			rule(".markdown-preview-view strong em,\n.markdown-preview-view em strong,\n.cm-em.cm-strong", {
-				color: s.emphasisItalicColor,
-			}),
 			rule(".cm-strikethrough,\n.markdown-preview-view del,\n.markdown-preview-view s", {
 				color: s.emphasisStrikeColor,
 				"text-decoration": "line-through",
+			}),
+			rule(".markdown-preview-view strong em,\n.markdown-preview-view em strong,\n.cm-em.cm-strong", {
+				color: s.emphasisItalicColor,
 			}),
 			// Headings keep their line-through but take their own colour.
 			rule(
@@ -357,16 +399,18 @@ function textSection(s: StyleToolkitSettings): string {
 
 		// Emphasis combinations override the level colour, matching the order
 		// the original snippets relied on.
+		// Same ladder as the plain-text block above:
+		// italics < bold < strikethrough < bold+italics.
 		parts.push(
 			rule(".cm-em .cm-inline-code,\n.cm-inline-code.cm-em,\n.markdown-rendered em > code,\n.markdown-rendered code em", {
 				color: s.inlineCodeEmColor,
 			}),
-			rule(".cm-strikethrough .cm-inline-code,\n.cm-inline-code.cm-strikethrough,\n.markdown-rendered del > code,\n.markdown-rendered code del", {
-				color: s.inlineCodeStrikeColor,
-			}),
 			rule(".cm-strong .cm-inline-code,\n.cm-inline-code.cm-strong,\n.markdown-rendered strong > code,\n.markdown-rendered code strong", {
 				color: s.inlineCodeStrongColor,
 				"font-weight": "bold",
+			}),
+			rule(".cm-strikethrough .cm-inline-code,\n.cm-inline-code.cm-strikethrough,\n.markdown-rendered del > code,\n.markdown-rendered code del", {
+				color: s.inlineCodeStrikeColor,
 			}),
 			rule(".cm-strong.cm-em .cm-inline-code,\n.cm-em.cm-strong .cm-inline-code,\n.cm-inline-code.cm-strong.cm-em,\n.markdown-rendered strong > em > code,\n.markdown-rendered em > strong > code", {
 				color: s.inlineCodeEmColor,
@@ -870,9 +914,15 @@ function calloutSection(s: StyleToolkitSettings): string {
 		parts.push(rule(calloutLists([1, 2]), { color: outer }));
 		parts.push(rule(calloutLists([3, 4, 5, 6]), { color: inner }));
 		// Live Preview: the original flattened every level to the inner colour.
+		// The `.markdown-source-view.mod-cm6` prefix is load-bearing -- the
+		// global greyscale is `.markdown-source-view.mod-cm6 .HyperMD-list-line-N`
+		// at (0,3,0), and a bare `.callout .HyperMD-list-line-N` at (0,2,0)
+		// would lose to it, making this whole option invisible.
 		parts.push(
 			rule(
-				LEVELS.map((n) => `.callout ${CM_LIST(n)}`).join(",\n"),
+				LEVELS.map(
+					(n) => `.markdown-source-view.mod-cm6 .callout ${CM_LIST(n)}`
+				).join(",\n"),
 				{ color: inner }
 			)
 		);
@@ -909,12 +959,21 @@ function calloutSection(s: StyleToolkitSettings): string {
 	}
 
 	if (s.calloutActiveStrikeEnabled) {
+		// Prefixed and heading-excluded on purpose. The global active-line rules
+		// are `.cm-line.cm-active:not(.HyperMD-header):not(.HyperMD-list-line)`
+		// at (0,4,0); a bare `.callout .cm-line.cm-active` at (0,3,0) lost to it,
+		// so a callout *paragraph* under the caret came out black instead of the
+		// callout's own faint colour -- while a callout *list* line tied and won
+		// on order. Same feature, two different outcomes. At (0,5,0) this wins
+		// outright and the inconsistency is gone.
+		const scope =
+			".markdown-source-view.mod-cm6 .callout .cm-line.cm-active:not(.HyperMD-header)";
 		parts.push(
-			rule(".callout .cm-line.cm-active .cm-strikethrough", {
+			rule(`${scope} .cm-strikethrough,\n${scope} del`, {
 				"text-decoration": "none",
 				color: s.calloutActiveColor,
 			}),
-			rule(".callout .cm-line.cm-active", { color: s.calloutActiveColor }),
+			rule(scope, { color: s.calloutActiveColor }),
 			rule(".callout .CodeMirror-activeline .cm-strikethrough", {
 				"text-decoration": "none",
 				color: s.calloutActiveColor,

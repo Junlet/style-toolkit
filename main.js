@@ -124,7 +124,7 @@ function readingListInner(kind, level, inner) {
 }
 function calloutList(kind, level) {
   const nest = new Array(level).fill(kind).join(" ");
-  return `.callout ${nest} > li`;
+  return `.markdown-preview-view .callout ${nest} > li`;
 }
 function calloutLists(levels) {
   const out = [];
@@ -176,12 +176,12 @@ function textSection(s) {
         color: s.emphasisBoldColor,
         "font-weight": "bold"
       }),
-      rule(".markdown-preview-view strong em,\n.markdown-preview-view em strong,\n.cm-em.cm-strong", {
-        color: s.emphasisItalicColor
-      }),
       rule(".cm-strikethrough,\n.markdown-preview-view del,\n.markdown-preview-view s", {
         color: s.emphasisStrikeColor,
         "text-decoration": "line-through"
+      }),
+      rule(".markdown-preview-view strong em,\n.markdown-preview-view em strong,\n.cm-em.cm-strong", {
+        color: s.emphasisItalicColor
       }),
       // Headings keep their line-through but take their own colour.
       rule(
@@ -224,12 +224,12 @@ function textSection(s) {
       rule(".cm-em .cm-inline-code,\n.cm-inline-code.cm-em,\n.markdown-rendered em > code,\n.markdown-rendered code em", {
         color: s.inlineCodeEmColor
       }),
-      rule(".cm-strikethrough .cm-inline-code,\n.cm-inline-code.cm-strikethrough,\n.markdown-rendered del > code,\n.markdown-rendered code del", {
-        color: s.inlineCodeStrikeColor
-      }),
       rule(".cm-strong .cm-inline-code,\n.cm-inline-code.cm-strong,\n.markdown-rendered strong > code,\n.markdown-rendered code strong", {
         color: s.inlineCodeStrongColor,
         "font-weight": "bold"
+      }),
+      rule(".cm-strikethrough .cm-inline-code,\n.cm-inline-code.cm-strikethrough,\n.markdown-rendered del > code,\n.markdown-rendered code del", {
+        color: s.inlineCodeStrikeColor
       }),
       rule(".cm-strong.cm-em .cm-inline-code,\n.cm-em.cm-strong .cm-inline-code,\n.cm-inline-code.cm-strong.cm-em,\n.markdown-rendered strong > em > code,\n.markdown-rendered em > strong > code", {
         color: s.inlineCodeEmColor,
@@ -609,7 +609,9 @@ function calloutSection(s) {
     parts.push(rule(calloutLists([3, 4, 5, 6]), { color: inner }));
     parts.push(
       rule(
-        LEVELS.map((n) => `.callout ${CM_LIST(n)}`).join(",\n"),
+        LEVELS.map(
+          (n) => `.markdown-source-view.mod-cm6 .callout ${CM_LIST(n)}`
+        ).join(",\n"),
         { color: inner }
       )
     );
@@ -642,12 +644,14 @@ function calloutSection(s) {
     );
   }
   if (s.calloutActiveStrikeEnabled) {
+    const scope = ".markdown-source-view.mod-cm6 .callout .cm-line.cm-active:not(.HyperMD-header)";
     parts.push(
-      rule(".callout .cm-line.cm-active .cm-strikethrough", {
+      rule(`${scope} .cm-strikethrough,
+${scope} del`, {
         "text-decoration": "none",
         color: s.calloutActiveColor
       }),
-      rule(".callout .cm-line.cm-active", { color: s.calloutActiveColor }),
+      rule(scope, { color: s.calloutActiveColor }),
       rule(".callout .CodeMirror-activeline .cm-strikethrough", {
         "text-decoration": "none",
         color: s.calloutActiveColor

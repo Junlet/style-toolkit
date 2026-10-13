@@ -100,6 +100,32 @@ Obsidian 自己是**用 `padding`（`--list-spacing`）做行距**的，不是 m
 >
 > 具体后果：在 v1.3.0 及更早版本里，**光标停在列表行上时文字不会变黑**（被层级灰压住了），而删除线却能变黑 —— 因为删除线那条是后代选择器（`.cm-line.cm-active .cm-strikethrough`），特异性真的更高。这个"只有一部分生效"的假象，正是顺序问题最难察觉的地方。
 
+### 优先级阶梯（这套插件里最容易出错的地方）
+
+样式里**几乎每条规则都带 `!important`**，所以 `!important` 在这些规则之间**不起任何作用** —— 决定胜负的是**特异性**，特异性相同时才看**先后顺序**。
+
+这一点已经造成过两次真实故障：一个开关静默失效（Callout 的列表着色被全局层级灰压住），以及同一个功能在 Callout 的**列表行**和**段落行**上表现不一样。所以阶梯写在这里，并且**由测试逐条断言**，而不是靠记忆：
+
+| 层级 | 作用 | 选择器 | 特异性 |
+|---|---|---|---|
+| 1 | 基础行色 | `.cm-s-obsidian .cm-line` | (0,2,0) |
+| 2 | 列表层级色 | `.markdown-source-view.mod-cm6 .HyperMD-list-line-N` | (0,3,0) |
+| 3 | 光标所在行（列表） | `.cm-line.cm-active.HyperMD-list-line` | (0,3,0) |
+| 3 | 光标所在行（段落） | `.cm-line.cm-active:not(…):not(…)` | (0,4,0) |
+| 4 | Callout 内列表色 | `.markdown-source-view.mod-cm6 .callout .HyperMD-list-line-N` | (0,4,0) |
+| 5 | Callout 内光标行 | `.markdown-source-view.mod-cm6 .callout .cm-line.cm-active:not(…)` | (0,6,0) |
+
+**两条判断原则**：
+
+- **更窄的语境压过更宽的语境** —— Callout 比整篇文档窄，所以 Callout 单独设的值压过全局
+- **更短暂的状态压过静止的状态** —— 光标所在行比列表层级更"瞬时"，所以它压过层级灰
+
+**打平**的地方（第 3 层的列表规则与第 2 层都是 (0,3,0)）由分节顺序决定 —— 这就是为什么**分节顺序是行为契约，不是排版**。
+
+**强调的阶梯**：斜体 < 加粗 < **删除线** < 粗斜体。原片段在普通文字和行内代码上用了**两套互相矛盾**的顺序，这里统一成一套：
+
+> 删除线压过单一其它标记，是因为它表示"这段内容已作废"，而它的颜色本来就是刻意做淡的；两个标记的组合压过任何单一标记，因为它更具体。
+
 ### 标题**不会**被「光标所在行」影响
 
 「光标所在行文字变黑」和「隐藏删除线」这两项，对标题行**完全不起作用**，而且**没有开关** —— 这是刻意做成不可配置的。
@@ -231,6 +257,14 @@ The sheet leans on `!important`, but the rules that actually collide do so at *i
 Relatedly, heading colours are painted on the `.cm-header-N` *span*, and an explicit colour on an element beats one inherited from its line — so colouring the line could never turn heading text black. That was first "fixed" by targeting the spans, which turned a long-inert option into a visible effect nobody had asked for; the option was then defaulted to off, which did not help either, because **changing a default cannot reach an install that already has the key saved** — the plugin writes the whole settings object on every save, so an existing `data.json` pins the old value. The option and its rules are gone instead: `activeSection` excludes headings with `:not(.HyperMD-header)` and contains no selector whose subject is a heading line, so headings are structurally immune rather than conditionally immune. The same removal also stopped the strikethrough-hiding from reaching headings, which it previously did even with the option off.
 
 **Moving a section is a behaviour change, not a formatting one.**
+
+### The cascade ladder
+
+Nearly every rule here carries `!important`, so importance settles nothing between them: specificity decides, and document order breaks the ties. That has caused two real faults — an option that silently did nothing (the callout list colour lost to the global greyscale), and the same feature behaving differently for list lines and paragraph lines inside a callout. The ladder is therefore written down and asserted in the tests rather than trusted: base line colour (0,2,0) < list level colour (0,3,0) < active line, list (0,3,0) < active line, paragraph (0,4,0) < callout list colour (0,4,0) < active line inside a callout (0,6,0).
+
+Two rules of thumb: **a narrower context outranks a wider one** (a callout is narrower than the document, so its own values win), and **a transient state outranks a resting one** (the line under the caret is more transient than a list level, so it wins). Where two rules genuinely tie — the active list line against the list greyscale, both (0,3,0) — the later section wins, which is why moving a section is a behaviour change rather than a formatting one.
+
+Within emphasis the ladder is italics < bold < strikethrough < bold+italics, and it is the same for plain text and inline code. The original snippets used two contradictory orders for those two cases; strikethrough outranks a single other mark because it means the text is retracted and its colour is deliberately faint, and a two-mark combination outranks any single mark because it is more specific.
 
 ### The vertical rule follows the *outermost* list, not the line's own marker
 
