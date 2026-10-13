@@ -22,7 +22,7 @@ A set of Obsidian CSS snippets, reimplemented as toggleable and adjustable plugi
 |---|---|
 | **总览** | 总开关、7 个分组开关、复制生成的 CSS、全部恢复默认 |
 | **文字与强调** | 基础文字颜色、光标所在行、中文斜体/加粗/删除线、行内代码 |
-| **列表** | 层级字号与灰度、无序列表竖线、项目符号、间距与缩进 |
+| **列表** | 层级字号与灰度、无序列表竖线、项目符号、嵌套缩进 |
 | **标题与链接** | H1~H6 颜色、尾部虚线、文件标题、正文与标题内的链接下划线 |
 | **Callout** | Callout 内的文字、强调、紧凑间距、缩放、列表灰度、行内代码 |
 | **代码块** | 代码块背景、字号、语法高亮配色 |
@@ -32,6 +32,8 @@ A set of Obsidian CSS snippets, reimplemented as toggleable and adjustable plugi
 
 ### 原来的 15 个片段去哪了
 
+收进插件的有 13 个：
+
 | 原片段 | 归到 |
 |---|---|
 | `文字样式层级列表设置.css` | 文字与强调 + 列表 |
@@ -40,9 +42,7 @@ A set of Obsidian CSS snippets, reimplemented as toggleable and adjustable plugi
 | `链接样式.css` | 标题与链接 |
 | `callout样式设置.css` | Callout |
 | `层级列表竖线.css` | 列表 |
-| `测试用.css` | 列表（列表与上方文本的间距） |
 | `代码块颜色.css` | 代码块 |
-| `代码块字体大小.css` | 代码块 |
 | `功能区调整.css` | 界面 |
 | `块id颜色变淡.css` | 界面 |
 | `隐藏侧边栏pin标志.css` | 界面 |
@@ -51,6 +51,31 @@ A set of Obsidian CSS snippets, reimplemented as toggleable and adjustable plugi
 | `缩小看板.css` | 界面（Kanban） |
 
 > `canvas文件名显示大小.css` 里那条缩略图文件名固定字号的规则，在原片段中是**注释掉的**（注明已由 canvas-loom 接管）。插件里**实现了它**，但**默认关闭** —— 因为它当前并未生效，打开会改变外观。见下面「Canvas 缩略图文件名」。
+
+### 有 2 个片段刻意没有收录
+
+| 原片段 | 为什么 |
+|---|---|
+| `测试用.css` | 它给**编辑器行**加了 `margin-top`，会破坏正文的编辑与选中。见下 |
+| `代码块字体大小.css` | 它把 Obsidian 的 `--code-size` 改成 `0.5em`，等于把**所有行内代码**缩到一半。代码块字号另有专门的设置项 |
+
+#### 为什么 `测试用.css` 那条会让文字编辑不了
+
+它写的是：
+
+```css
+.markdown-source-view.mod-cm6 .HyperMD-list-line:has(...) {
+    margin-top: 1em !important;
+}
+```
+
+CodeMirror 6 靠一张**每行高度的映射表**把鼠标坐标换算成文档位置。这张表由 `ResizeObserver` 观察每个行元素的 **border box** 得来 —— 而 `margin` 在 border box **之外**，永远不会被观察到。
+
+于是每经过一个列表行，映射表算出的累积偏移就比实际少 1em。列表越多、位置越靠下，偏差越大：点击落在相邻行上，选区也跟着错位，表现就是**"有些文字无法编辑和选中"**。
+
+Obsidian 自己是**用 `padding`（`--list-spacing`）做行距**的，不是 margin，正是这个原因。所以插件里不生成任何加在编辑器行上的 `margin`，测试里也有一条专门的断言守着这一点。
+
+> 想要列表上方的间距，请在主题/外观里调 `--list-spacing`，或者干脆不要 —— 用 margin 加间距是行不通的。
 
 ### 和 CSS 片段一起用会怎样
 
@@ -116,11 +141,16 @@ npm run ship      # build + deploy
 
 ## English
 
-A bundle of fifteen hand-written Obsidian CSS snippets, reimplemented as a plugin whose styling is **generated from your settings** rather than shipped as a static stylesheet. That distinction is what makes the toggles honest: switching a feature off removes its rules outright instead of layering another `!important` rule on top, and disabling the plugin removes the injected `<style>` entirely.
+A bundle of fifteen hand-written Obsidian CSS snippets, of which **thirteen** are reimplemented here as a plugin whose styling is **generated from your settings** rather than shipped as a static stylesheet. That distinction is what makes the toggles honest: switching a feature off removes its rules outright instead of layering another `!important` rule on top, and disabling the plugin removes the injected `<style>` entirely.
 
-Settings are split across seven tabs — Overview (master switch, seven section gates, copy the generated CSS, reset), Text & emphasis, Lists, Headings & links, Callout, Code, and Interface. Roughly a hundred individual controls; the section gates live only on the Overview tab so that no two controls are ever bound to the same key.
+Settings are split across seven tabs — Overview (master switch, seven section gates, copy the generated CSS, reset), Text & emphasis, Lists, Headings & links, Callout, Code, and Interface. Nearly a hundred individual controls; the section gates live only on the Overview tab so that no two controls are ever bound to the same key.
 
-Every default reproduces the snippet it replaces, so installing changes nothing you were already looking at. Three spots where the original snippets contradicted themselves were unified, and they are listed in the Chinese section above.
+### Two snippets are deliberately not included
+
+- **`测试用.css` added `margin-top` to editor lines.** That breaks editing and selecting: CodeMirror's vertical position map is built by a `ResizeObserver` watching each line's *border box*, and a margin sits outside it, so the map is never told the space exists. Every list line makes the computed offset drift by another em, and the further down the document you go the worse the error — clicks land on neighbouring lines and selections come out shifted. Obsidian spaces lines with `padding` (`--list-spacing`) for exactly this reason. The plugin emits **no vertical margin on any editor line**, and a test asserts it.
+- **`代码块字体大小.css` set `--code-size: 0.5em`**, halving every piece of inline code. Code block sizing is a proper setting instead.
+
+Every other default reproduces the snippet it replaces, so installing changes nothing you were already looking at. Three spots where the original snippets contradicted themselves were unified, and they are listed in the Chinese section above.
 
 `canvas文件名显示大小.css`'s thumbnail-font-size rule was commented out in the source, where canvas-loom had taken it over. It **is** implemented here — with a size, a colour, a follow-the-card-colour option, and background controls — but it **defaults to off**, because it is not currently in effect and enabling it changes how your canvas looks. The "follow the card colour" option works through Obsidian's own `--canvas-color`, which a node carries whether its colour was picked from the six presets, chosen by hand, or never set at all.
 

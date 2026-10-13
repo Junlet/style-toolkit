@@ -16,6 +16,20 @@
  *   - In callouts the list greyscale was applied in reading view but the
  *     editing rules flattened every level to the inner colour. That is
  *     reproduced as-is rather than "fixed".
+ *
+ * DELIBERATELY NOT IMPLEMENTED
+ * ----------------------------
+ * Two rules from the original snippets are gone on purpose. Both are listed in
+ * the README so they are not quietly re-added:
+ *
+ *   - `margin-top` on `.HyperMD-list-line`, which drew extra space above a list.
+ *     Vertical margins on a `.cm-line` break CodeMirror's vertical hit-testing:
+ *     its height map tracks each line's border box, margins sit outside it, and
+ *     the accumulated offset drifts -- so clicking a line lands on its
+ *     neighbour and the text cannot be edited or selected. Obsidian spaces lines
+ *     with `padding` (`--list-spacing`) for exactly this reason.
+ *   - `body { --code-size: 0.5em }`, which halved every piece of inline code.
+ *     Code block sizing is exposed as its own setting instead.
  */
 
 import type { StyleToolkitSettings } from "./settings";
@@ -495,15 +509,6 @@ function listSection(s: StyleToolkitSettings): string {
 		}
 	}
 
-	if (s.listSpacingEnabled) {
-		parts.push(
-			rule(
-				".markdown-source-view.mod-cm6 .HyperMD-list-line:has(.cm-formatting-list-ul, .cm-formatting-list-ol)",
-				{ "margin-top": em(s.listSpacingMarginTop) }
-			)
-		);
-	}
-
 	if (s.nestedUlIndentEnabled) {
 		parts.push(
 			rule(".markdown-preview-view ul ul", {
@@ -838,10 +843,6 @@ function codeSection(s: StyleToolkitSettings): string {
 			rule(".cm-s-obsidian .HyperMD-codeblock", { "font-size": size }),
 			rule(".callout .HyperMD-codeblock", { "font-size": "inherit" })
 		);
-	}
-
-	if (s.codeSizeVarEnabled) {
-		parts.push(rule("body", { "--code-size": em(s.codeSizeVar) }));
 	}
 
 	if (s.codeTokenEnabled) {

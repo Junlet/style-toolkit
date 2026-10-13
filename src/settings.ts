@@ -80,9 +80,6 @@ export interface StyleToolkitSettings {
 	olRainbowEnabled: boolean;
 	olRainbowColors: string[];
 
-	listSpacingEnabled: boolean;
-	listSpacingMarginTop: number;
-
 	nestedUlIndentEnabled: boolean;
 	nestedUlIndent: number;
 
@@ -154,9 +151,6 @@ export interface StyleToolkitSettings {
 
 	codeBlockFontSizeEnabled: boolean;
 	codeBlockFontSize: number;
-
-	codeSizeVarEnabled: boolean;
-	codeSizeVar: number;
 
 	codeTokenEnabled: boolean;
 	codeTokenComment: string;
@@ -283,9 +277,6 @@ export const DEFAULT_SETTINGS: StyleToolkitSettings = {
 	olRainbowEnabled: true,
 	olRainbowColors: ["#9bbb59", "#4bacc6", "#9370db", "#bfbfbf"],
 
-	listSpacingEnabled: true,
-	listSpacingMarginTop: 1,
-
 	nestedUlIndentEnabled: true,
 	nestedUlIndent: 1.5,
 
@@ -371,9 +362,6 @@ export const DEFAULT_SETTINGS: StyleToolkitSettings = {
 
 	codeBlockFontSizeEnabled: true,
 	codeBlockFontSize: 0.8,
-
-	codeSizeVarEnabled: true,
-	codeSizeVar: 0.5,
 
 	codeTokenEnabled: true,
 	codeTokenComment: "#a5a5a5",
@@ -530,7 +518,6 @@ const NUMBER_RANGES: Record<string, [number, number]> = {
 	ulLineWidth: [0, 8],
 	ulLinePaddingRead: [0, 4],
 	ulLinePaddingEdit: [0, 4],
-	listSpacingMarginTop: [0, 3],
 	nestedUlIndent: [0, 4],
 	dashGapRatio: [0.2, 4],
 	inlineTitleSize: [0.8, 5],
@@ -543,7 +530,6 @@ const NUMBER_RANGES: Record<string, [number, number]> = {
 	calloutZoomTitle: [0.3, 2],
 	calloutZoomContent: [0.3, 2],
 	codeBlockFontSize: [0.4, 1.6],
-	codeSizeVar: [0.4, 1.6],
 	ribbonWidth: [20, 80],
 	ribbonIconSize: [10, 40],
 	ribbonPaddingTop: [0, 20],

@@ -339,14 +339,6 @@ ${readingList("ol", level)}`,
       );
     }
   }
-  if (s.listSpacingEnabled) {
-    parts.push(
-      rule(
-        ".markdown-source-view.mod-cm6 .HyperMD-list-line:has(.cm-formatting-list-ul, .cm-formatting-list-ol)",
-        { "margin-top": em(s.listSpacingMarginTop) }
-      )
-    );
-  }
   if (s.nestedUlIndentEnabled) {
     parts.push(
       rule(".markdown-preview-view ul ul", {
@@ -624,9 +616,6 @@ function codeSection(s) {
       rule(".callout .HyperMD-codeblock", { "font-size": "inherit" })
     );
   }
-  if (s.codeSizeVarEnabled) {
-    parts.push(rule("body", { "--code-size": em(s.codeSizeVar) }));
-  }
   if (s.codeTokenEnabled) {
     parts.push(
       rule("span.cm-comment", { color: s.codeTokenComment }),
@@ -802,8 +791,6 @@ var DEFAULT_SETTINGS = {
   ulMarkerColor: "var(--text-normal)",
   olRainbowEnabled: true,
   olRainbowColors: ["#9bbb59", "#4bacc6", "#9370db", "#bfbfbf"],
-  listSpacingEnabled: true,
-  listSpacingMarginTop: 1,
   nestedUlIndentEnabled: true,
   nestedUlIndent: 1.5,
   // -- headings --------------------------------------------------------
@@ -873,8 +860,6 @@ var DEFAULT_SETTINGS = {
   codeBackgroundReading: false,
   codeBlockFontSizeEnabled: true,
   codeBlockFontSize: 0.8,
-  codeSizeVarEnabled: true,
-  codeSizeVar: 0.5,
   codeTokenEnabled: true,
   codeTokenComment: "#a5a5a5",
   codeTokenKeyword: "#0000ff",
@@ -943,7 +928,6 @@ var NUMBER_RANGES = {
   ulLineWidth: [0, 8],
   ulLinePaddingRead: [0, 4],
   ulLinePaddingEdit: [0, 4],
-  listSpacingMarginTop: [0, 3],
   nestedUlIndent: [0, 4],
   dashGapRatio: [0.2, 4],
   inlineTitleSize: [0.8, 5],
@@ -956,7 +940,6 @@ var NUMBER_RANGES = {
   calloutZoomTitle: [0.3, 2],
   calloutZoomContent: [0.3, 2],
   codeBlockFontSize: [0.4, 1.6],
-  codeSizeVar: [0.4, 1.6],
   ribbonWidth: [20, 80],
   ribbonIconSize: [10, 40],
   ribbonPaddingTop: [0, 20],
@@ -1343,21 +1326,7 @@ function listRows() {
     { kind: "colorArray", key: "olRainbowColors", index: 1, name: "二级颜色" },
     { kind: "colorArray", key: "olRainbowColors", index: 2, name: "三级颜色" },
     { kind: "colorArray", key: "olRainbowColors", index: 3, name: "四级颜色" },
-    { kind: "heading", name: "间距" },
-    {
-      kind: "toggle",
-      key: "listSpacingEnabled",
-      name: "列表与上方文本的间距",
-      desc: "编辑模式下给列表行加上外边距，让它和上面的正文拉开。"
-    },
-    {
-      kind: "slider",
-      key: "listSpacingMarginTop",
-      name: "间距（em）",
-      min: 0,
-      max: 3,
-      step: 0.05
-    },
+    { kind: "heading", name: "嵌套缩进" },
     {
       kind: "toggle",
       key: "nestedUlIndentEnabled",
@@ -1685,20 +1654,7 @@ function codeRows() {
       kind: "slider",
       key: "codeBlockFontSize",
       name: "代码块字号（em）",
-      min: 0.4,
-      max: 1.6,
-      step: 0.05
-    },
-    {
-      kind: "toggle",
-      key: "codeSizeVarEnabled",
-      name: "代码字号变量",
-      desc: "改写 Obsidian 的 --code-size，行内代码和代码块都会跟着变。"
-    },
-    {
-      kind: "slider",
-      key: "codeSizeVar",
-      name: "--code-size（em）",
+      desc: "相对正文字号的倍数。Callout 内部恢复继承，不叠加。",
       min: 0.4,
       max: 1.6,
       step: 0.05
