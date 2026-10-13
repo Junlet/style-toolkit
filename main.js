@@ -696,6 +696,28 @@ function uiSection(s) {
       })
     );
   }
+  if (s.canvasPlaceholderEnabled) {
+    const text = { "font-size": px(s.canvasPlaceholderSize) };
+    if (s.canvasPlaceholderColorMode === "follow") {
+      text.color = "var(--canvas-color)";
+    } else if (s.canvasPlaceholderColorMode === "custom") {
+      text.color = s.canvasPlaceholderColor;
+    }
+    parts.push(rule(".canvas-node-placeholder", text));
+    if (s.canvasPlaceholderBgMode === "follow") {
+      parts.push(
+        rule(".canvas-node-placeholder", {
+          "background-color": `color-mix(in oklch, var(--canvas-color) ${num(s.canvasPlaceholderBgOpacity)}%, transparent)`
+        })
+      );
+    } else if (s.canvasPlaceholderBgMode === "custom") {
+      parts.push(
+        rule(".canvas-node-placeholder", {
+          "background-color": s.canvasPlaceholderBgColor
+        })
+      );
+    }
+  }
   if (s.kanbanScaleEnabled) {
     parts.push(
       rule(".kanban-plugin", {
@@ -876,6 +898,13 @@ var DEFAULT_SETTINGS = {
   hidePinIconEnabled: true,
   canvasHideMenuEnabled: true,
   canvasHideEmbedTitleEnabled: true,
+  canvasPlaceholderEnabled: false,
+  canvasPlaceholderSize: 55,
+  canvasPlaceholderColorMode: "follow",
+  canvasPlaceholderColor: "#c0c0c0",
+  canvasPlaceholderBgMode: "keep",
+  canvasPlaceholderBgOpacity: 10,
+  canvasPlaceholderBgColor: "#f2f2f2",
   kanbanScaleEnabled: true,
   kanbanScale: 0.8
 };
@@ -935,8 +964,12 @@ var NUMBER_RANGES = {
   blockIdOpacity: [0, 1],
   blockIdFontSize: [0.5, 1.5],
   blockIdHoverOpacity: [0, 1],
-  kanbanScale: [0.3, 1.5]
+  kanbanScale: [0.3, 1.5],
+  canvasPlaceholderSize: [6, 200],
+  canvasPlaceholderBgOpacity: [0, 100]
 };
+var PLACEHOLDER_COLOR_MODES = ["follow", "custom", "inherit"];
+var PLACEHOLDER_BG_MODES = ["keep", "follow", "custom"];
 function normalizeSettings(stored) {
   var _a;
   const raw = stored != null ? stored : {};
@@ -968,6 +1001,12 @@ function normalizeSettings(stored) {
   }
   if (!linkStyles.includes(out.headingLinkStyle)) {
     out.headingLinkStyle = DEFAULT_SETTINGS.headingLinkStyle;
+  }
+  if (!PLACEHOLDER_COLOR_MODES.includes(out.canvasPlaceholderColorMode)) {
+    out.canvasPlaceholderColorMode = DEFAULT_SETTINGS.canvasPlaceholderColorMode;
+  }
+  if (!PLACEHOLDER_BG_MODES.includes(out.canvasPlaceholderBgMode)) {
+    out.canvasPlaceholderBgMode = DEFAULT_SETTINGS.canvasPlaceholderBgMode;
   }
   if (out.listSizeBase < out.listSizeMin) {
     out.listSizeMin = out.listSizeBase;
@@ -1773,6 +1812,55 @@ function uiRows() {
       name: "隐藏卡片内笔记的标题",
       desc: "画布节点里嵌入的笔记不再显示顶部标题行。"
     },
+    { kind: "heading", name: "Canvas 缩略图文件名" },
+    {
+      kind: "toggle",
+      key: "canvasPlaceholderEnabled",
+      name: "自定义缩略图文件名",
+      desc: "卡片缩小到只显示文件名时那行字的字号与颜色。原片段里这一段是注释掉的（注明已由 canvas-loom 接管），所以这里默认关闭：打开会改变外观，若 canvas-loom 也开着同类设置，两者会叠加。"
+    },
+    {
+      kind: "slider",
+      key: "canvasPlaceholderSize",
+      name: "字号（px）",
+      desc: "Obsidian 自带的是 32px，原片段里写的是 55px。",
+      min: 6,
+      max: 200,
+      step: 1
+    },
+    {
+      kind: "dropdown",
+      key: "canvasPlaceholderColorMode",
+      name: "文字颜色",
+      desc: "「跟随卡片颜色」读的是 Obsidian 给节点设的 --canvas-color，所以预设色、自定义色都能跟上；没设过颜色的卡片用它自己的中性默认值。",
+      options: [
+        { value: "follow", label: "跟随卡片颜色" },
+        { value: "custom", label: "自定义颜色" },
+        { value: "inherit", label: "保持默认（不改）" }
+      ]
+    },
+    { kind: "color", key: "canvasPlaceholderColor", name: "自定义文字颜色" },
+    {
+      kind: "dropdown",
+      key: "canvasPlaceholderBgMode",
+      name: "背景色",
+      desc: "Obsidian 默认会铺一层卡片颜色的 10% 淡色底。",
+      options: [
+        { value: "keep", label: "保持默认（不改）" },
+        { value: "follow", label: "跟随卡片颜色（淡色）" },
+        { value: "custom", label: "自定义颜色" }
+      ]
+    },
+    {
+      kind: "slider",
+      key: "canvasPlaceholderBgOpacity",
+      name: "淡色底浓度（%）",
+      desc: "仅在背景选「跟随卡片颜色（淡色）」时生效。",
+      min: 0,
+      max: 100,
+      step: 1
+    },
+    { kind: "color", key: "canvasPlaceholderBgColor", name: "自定义背景色" },
     { kind: "heading", name: "Kanban" },
     {
       kind: "toggle",

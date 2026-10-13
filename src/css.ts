@@ -929,6 +929,42 @@ function uiSection(s: StyleToolkitSettings): string {
 		);
 	}
 
+	if (s.canvasPlaceholderEnabled) {
+		// `.canvas-node-placeholder` is the file name drawn on a minimised
+		// Canvas node.
+		//
+		// "Follow the card colour" needs exactly one declaration. Obsidian gives
+		// a coloured node `mod-canvas-color-<n>` (which sets `--canvas-color` to
+		// that preset) or, for a hand-picked colour, `mod-canvas-color-custom`
+		// plus an inline `--canvas-color`; an uncoloured node inherits the value
+		// Obsidian sets on `body` (#c0c0c0 light, #7e7e7e dark). So
+		// `var(--canvas-color)` covers presets, custom colours and the neutral
+		// case at once, with no need to enumerate the six presets.
+		const text: Decls = { "font-size": px(s.canvasPlaceholderSize) };
+		if (s.canvasPlaceholderColorMode === "follow") {
+			text.color = "var(--canvas-color)";
+		} else if (s.canvasPlaceholderColorMode === "custom") {
+			text.color = s.canvasPlaceholderColor;
+		}
+		parts.push(rule(".canvas-node-placeholder", text));
+
+		// Obsidian already tints this background with the card colour at 10%;
+		// "follow" re-emits that tint with an adjustable strength.
+		if (s.canvasPlaceholderBgMode === "follow") {
+			parts.push(
+				rule(".canvas-node-placeholder", {
+					"background-color": `color-mix(in oklch, var(--canvas-color) ${num(s.canvasPlaceholderBgOpacity)}%, transparent)`,
+				})
+			);
+		} else if (s.canvasPlaceholderBgMode === "custom") {
+			parts.push(
+				rule(".canvas-node-placeholder", {
+					"background-color": s.canvasPlaceholderBgColor,
+				})
+			);
+		}
+	}
+
 	if (s.kanbanScaleEnabled) {
 		// Scaling down leaves the original footprint filled by enlarging the
 		// box by the inverse, so the board still scrolls edge to edge.

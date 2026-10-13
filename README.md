@@ -26,7 +26,7 @@ A set of Obsidian CSS snippets, reimplemented as toggleable and adjustable plugi
 | **标题与链接** | H1~H6 颜色、尾部虚线、文件标题、正文与标题内的链接下划线 |
 | **Callout** | Callout 内的文字、强调、紧凑间距、缩放、列表灰度、行内代码 |
 | **代码块** | 代码块背景、字号、语法高亮配色 |
-| **界面** | 左侧功能区、块 ID、pin 图标、Canvas、Kanban 缩放 |
+| **界面** | 左侧功能区、块 ID、pin 图标、Canvas（含缩略图文件名）、Kanban 缩放 |
 
 分组开关只在**总览**页出现，不会在对应的标签页里再来一份 —— 两个控件绑同一个值时，改了一个另一个在界面上不会跟着变。
 
@@ -47,10 +47,10 @@ A set of Obsidian CSS snippets, reimplemented as toggleable and adjustable plugi
 | `块id颜色变淡.css` | 界面 |
 | `隐藏侧边栏pin标志.css` | 界面 |
 | `canvas隐藏标题.css` | 界面 |
-| `canvas文件名显示大小.css` | 界面（只保留「隐藏底部菜单栏」） |
+| `canvas文件名显示大小.css` | 界面（隐藏底部菜单栏 + Canvas 缩略图文件名） |
 | `缩小看板.css` | 界面（Kanban） |
 
-> `canvas文件名显示大小.css` 里那条缩略图文件名固定字号的规则本来就是注释掉的，注释说已由 canvas-loom 插件接管，所以**没有实现**。
+> `canvas文件名显示大小.css` 里那条缩略图文件名固定字号的规则，在原片段中是**注释掉的**（注明已由 canvas-loom 接管）。插件里**实现了它**，但**默认关闭** —— 因为它当前并未生效，打开会改变外观。见下面「Canvas 缩略图文件名」。
 
 ### 和 CSS 片段一起用会怎样
 
@@ -69,6 +69,24 @@ A set of Obsidian CSS snippets, reimplemented as toggleable and adjustable plugi
 ### 依赖
 
 只需要 Obsidian ≥ 1.8.7。纯 CSS，不依赖 Canvas、Excalidraw 或任何其它插件。移动端也能用。
+
+### Canvas 缩略图文件名
+
+卡片缩小到只显示文件名时（`.canvas-node-placeholder`）那行字，可以单独设置。在「界面」页：
+
+| 设置 | 默认 | 说明 |
+|---|---|---|
+| 自定义缩略图文件名 | **关** | 总开关 |
+| 字号（px） | 55 | Obsidian 自带的是 32px，原片段里写的是 55px |
+| 文字颜色 | 跟随卡片颜色 | 或自定义颜色 / 保持默认 |
+| 背景色 | 保持默认 | 或跟随卡片颜色（淡色）/ 自定义颜色 |
+| 淡色底浓度（%） | 10 | 仅在背景选「跟随卡片颜色（淡色）」时生效 |
+
+**「跟随卡片颜色」是怎么实现的**：Obsidian 给有颜色的节点加的是 class（预设色是 `mod-canvas-color-1`~`6`，手选颜色是 `mod-canvas-color-custom` 加一条内联的 `--canvas-color`），这些都会把 `--canvas-color` 设成该卡片的颜色；没设过颜色的卡片则用它写在 `body` 上的中性默认值（浅色主题 `#c0c0c0`、深色 `#7e7e7e`）。
+
+所以一条 `color: var(--canvas-color)` 就同时覆盖了预设色、自定义色和未着色三种情况，不需要把六种预设逐个列出来。
+
+> 默认关闭的原因：原片段里这段是注释掉的，也就是**当前没生效**。而且 canvas-loom 也管这件事 —— 两边都开的话会叠加。
 
 ### 三处和原片段不一致的地方
 
@@ -102,7 +120,9 @@ A bundle of fifteen hand-written Obsidian CSS snippets, reimplemented as a plugi
 
 Settings are split across seven tabs — Overview (master switch, seven section gates, copy the generated CSS, reset), Text & emphasis, Lists, Headings & links, Callout, Code, and Interface. Roughly a hundred individual controls; the section gates live only on the Overview tab so that no two controls are ever bound to the same key.
 
-Every default reproduces the snippet it replaces, so installing changes nothing you were already looking at. Three spots where the original snippets contradicted themselves were unified, and they are listed in the Chinese section above. `canvas文件名显示大小.css`'s thumbnail-font-size rule was already commented out in the source (canvas-loom took it over) and is deliberately not implemented.
+Every default reproduces the snippet it replaces, so installing changes nothing you were already looking at. Three spots where the original snippets contradicted themselves were unified, and they are listed in the Chinese section above.
+
+`canvas文件名显示大小.css`'s thumbnail-font-size rule was commented out in the source, where canvas-loom had taken it over. It **is** implemented here — with a size, a colour, a follow-the-card-colour option, and background controls — but it **defaults to off**, because it is not currently in effect and enabling it changes how your canvas looks. The "follow the card colour" option works through Obsidian's own `--canvas-color`, which a node carries whether its colour was picked from the six presets, chosen by hand, or never set at all.
 
 Requires Obsidian ≥ 1.8.7 and nothing else — it is pure CSS, with no Canvas, Excalidraw or other plugin dependency, and it works on mobile.
 

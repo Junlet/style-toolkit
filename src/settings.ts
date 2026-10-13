@@ -188,6 +188,22 @@ export interface StyleToolkitSettings {
 	canvasHideMenuEnabled: boolean;
 	canvasHideEmbedTitleEnabled: boolean;
 
+	/**
+	 * Thumbnail file name on a minimised Canvas node.
+	 *
+	 * Off by default: the snippet this comes from was commented out, so turning
+	 * it on is a visible change rather than a reproduction of the current look.
+	 */
+	canvasPlaceholderEnabled: boolean;
+	canvasPlaceholderSize: number;
+	/** `follow` | `custom` | `inherit` */
+	canvasPlaceholderColorMode: string;
+	canvasPlaceholderColor: string;
+	/** `keep` | `follow` | `custom` */
+	canvasPlaceholderBgMode: string;
+	canvasPlaceholderBgOpacity: number;
+	canvasPlaceholderBgColor: string;
+
 	kanbanScaleEnabled: boolean;
 	kanbanScale: number;
 }
@@ -389,6 +405,14 @@ export const DEFAULT_SETTINGS: StyleToolkitSettings = {
 	canvasHideMenuEnabled: true,
 	canvasHideEmbedTitleEnabled: true,
 
+	canvasPlaceholderEnabled: false,
+	canvasPlaceholderSize: 55,
+	canvasPlaceholderColorMode: "follow",
+	canvasPlaceholderColor: "#c0c0c0",
+	canvasPlaceholderBgMode: "keep",
+	canvasPlaceholderBgOpacity: 10,
+	canvasPlaceholderBgColor: "#f2f2f2",
+
 	kanbanScaleEnabled: true,
 	kanbanScale: 0.8,
 };
@@ -528,7 +552,15 @@ const NUMBER_RANGES: Record<string, [number, number]> = {
 	blockIdFontSize: [0.5, 1.5],
 	blockIdHoverOpacity: [0, 1],
 	kanbanScale: [0.3, 1.5],
+	canvasPlaceholderSize: [6, 200],
+	canvasPlaceholderBgOpacity: [0, 100],
 };
+
+/** Allowed values for the placeholder text colour mode. */
+export const PLACEHOLDER_COLOR_MODES = ["follow", "custom", "inherit"];
+
+/** Allowed values for the placeholder background mode. */
+export const PLACEHOLDER_BG_MODES = ["keep", "follow", "custom"];
 
 /**
  * Merges stored data over the defaults, rejecting unusable values.
@@ -588,6 +620,14 @@ export function normalizeSettings(
 	}
 	if (!linkStyles.includes(out.headingLinkStyle as string)) {
 		out.headingLinkStyle = DEFAULT_SETTINGS.headingLinkStyle;
+	}
+	// These two read as colours to the generic pass above (their names contain
+	// "color"), so they need checking against their own value sets.
+	if (!PLACEHOLDER_COLOR_MODES.includes(out.canvasPlaceholderColorMode as string)) {
+		out.canvasPlaceholderColorMode = DEFAULT_SETTINGS.canvasPlaceholderColorMode;
+	}
+	if (!PLACEHOLDER_BG_MODES.includes(out.canvasPlaceholderBgMode as string)) {
+		out.canvasPlaceholderBgMode = DEFAULT_SETTINGS.canvasPlaceholderBgMode;
 	}
 
 	// The base size must stay above the floor, or every level clamps to the
