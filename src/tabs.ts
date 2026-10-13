@@ -122,7 +122,14 @@ function textRows(): Row[] {
 		{ kind: "color", key: "activeLineColor", name: "变成的颜色" },
 		{ kind: "toggle", key: "activeLineList", name: "对列表行生效" },
 		{ kind: "toggle", key: "activeLineParagraph", name: "对普通段落生效" },
-		{ kind: "toggle", key: "activeLineHeading", name: "对标题行生效" },
+		{
+			kind: "toggle",
+			key: "activeLineHeading",
+			name: "对标题行生效",
+			desc:
+				"默认关闭。标题自带一个层级颜色，光标一进去就把它压成黑色会盖掉这个区分 ——" +
+				"偏偏那一刻你正想看清楚这行是几级标题。打开后标题文字与 ## 标记都会跟着变黑。",
+		},
 		{
 			kind: "toggle",
 			key: "activeStrikeHideEnabled",

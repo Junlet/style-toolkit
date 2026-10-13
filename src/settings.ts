@@ -230,7 +230,11 @@ export const DEFAULT_SETTINGS: StyleToolkitSettings = {
 	activeLineColor: "#000000",
 	activeLineList: true,
 	activeLineParagraph: true,
-	activeLineHeading: true,
+	// Off by default. A heading carries its own level colour, and flattening it
+	// to black the moment the caret lands on it erases that distinction --
+	// which reads as a bug rather than as a feature at the one moment you are
+	// trying to read the heading back.
+	activeLineHeading: false,
 
 	activeStrikeHideEnabled: true,
 	activeStrikeColor: "#000000",

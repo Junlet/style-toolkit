@@ -421,7 +421,13 @@ function activeSection(s: StyleToolkitSettings): string {
 	}
 
 	if (s.activeStrikeHideEnabled) {
-		const scope = ".cm-line.cm-active";
+		// The heading option governs the whole feature for headings, not just
+		// the colour. Otherwise a struck-through heading would still be
+		// recoloured on the active line while the rest of it kept its level
+		// colour -- a half-applied rule, which looks like a bug.
+		const scope = s.activeLineHeading
+			? ".cm-line.cm-active"
+			: ".cm-line.cm-active:not(.HyperMD-header)";
 		parts.push(
 			rule(`${scope} .cm-strikethrough,\n${scope} del`, {
 				"text-decoration": "none",

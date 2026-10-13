@@ -218,7 +218,7 @@ function activeSection(s) {
     }
   }
   if (s.activeStrikeHideEnabled) {
-    const scope = ".cm-line.cm-active";
+    const scope = s.activeLineHeading ? ".cm-line.cm-active" : ".cm-line.cm-active:not(.HyperMD-header)";
     parts.push(
       rule(`${scope} .cm-strikethrough,
 ${scope} del`, {
@@ -773,7 +773,11 @@ var DEFAULT_SETTINGS = {
   activeLineColor: "#000000",
   activeLineList: true,
   activeLineParagraph: true,
-  activeLineHeading: true,
+  // Off by default. A heading carries its own level colour, and flattening it
+  // to black the moment the caret lands on it erases that distinction --
+  // which reads as a bug rather than as a feature at the one moment you are
+  // trying to read the heading back.
+  activeLineHeading: false,
   activeStrikeHideEnabled: true,
   activeStrikeColor: "#000000",
   strikeHeadingGreyEnabled: true,
@@ -1195,7 +1199,12 @@ function textRows() {
     { kind: "color", key: "activeLineColor", name: "变成的颜色" },
     { kind: "toggle", key: "activeLineList", name: "对列表行生效" },
     { kind: "toggle", key: "activeLineParagraph", name: "对普通段落生效" },
-    { kind: "toggle", key: "activeLineHeading", name: "对标题行生效" },
+    {
+      kind: "toggle",
+      key: "activeLineHeading",
+      name: "对标题行生效",
+      desc: "默认关闭。标题自带一个层级颜色，光标一进去就把它压成黑色会盖掉这个区分 ——偏偏那一刻你正想看清楚这行是几级标题。打开后标题文字与 ## 标记都会跟着变黑。"
+    },
     {
       kind: "toggle",
       key: "activeStrikeHideEnabled",
