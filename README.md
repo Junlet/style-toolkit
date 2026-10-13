@@ -159,6 +159,32 @@ Obsidian 自己是**用 `padding`（`--list-spacing`）做行距**的，不是 m
 
 > 默认关闭的原因：原片段里这段是注释掉的，也就是**当前没生效**。而且 canvas-loom 也管这件事 —— 两边都开的话会叠加。
 
+### 左侧竖线：由「最外层列表」的类型决定
+
+紫色竖线**不是逐行按自己那个符号画的**，而是看这一行所属列表的**最外层**是什么：
+
+| 最外层 | 下级是什么 | 竖线 |
+|---|---|---|
+| 无序 `-` | 无序 / 有序 / 普通段落 / 更深的混合 | **画**，一路延伸到底 |
+| 有序 `1.` | 无序 / 有序 / 普通段落 / 更深的混合 | **不画** |
+
+（原来的规则是"这一行自己是不是无序列表"。于是 `-` 里嵌一个 `1.` 会把线打断，`1.` 里嵌一个 `-` 又会冒出一小截孤零零的线。）
+
+**怎么实现的**：实时预览里每一行都是**扁平的兄弟节点**，DOM 里**根本不包含"这一行属于哪个列表"这个信息** —— CSS 只能看出这一行自己的符号类型。所以插件做了一次结构分析：
+
+| 文件 | 做什么 |
+|---|---|
+| `src/listroot.ts` | 扫描文档文本，逐行算出它所属列表的最外层类型（**纯逻辑，无 DOM、无 Obsidian**，所以可以完整测试） |
+| `src/editor.ts` | 用 CodeMirror 的**行装饰**给"最外层是无序"的行加一个 `style-toolkit-ul-root` class |
+| `src/css.ts` | 竖线只认这个 class |
+
+阅读视图不需要这么麻烦 —— 那里的嵌套是**真的 DOM**，`:not(ul ul):not(ol ul)` 就能直接表达"最外层"。
+
+> [!warning] 这里依赖 Obsidian 自己那份 CodeMirror
+> Obsidian 通过模块注册表把 `@codemirror/view` / `@codemirror/state` 暴露给插件。**必须用它那一份** —— 自己打包一份会因为 `instanceof` 检查失败而直接报错（Obsidian 自己的报错信息就写着 "multiple instances of @codemirror/state are loaded, breaking instanceof checks"）。
+>
+> 所以插件用 `require` 取它那份，并且 `--packages=external` **不把它打进产物**（已核对：产物里只有 `require("@codemirror/view")`，没有 CM 的代码）。取不到时会退回旧的按符号判断的规则 —— 会断线，但不会没有线 —— 并在控制台记录原因。
+
 ### 三处和原片段不一致的地方
 
 原片段内部有前后矛盾的地方，整合时统一了：
@@ -205,6 +231,14 @@ The sheet leans on `!important`, but the rules that actually collide do so at *i
 Relatedly, heading colours are painted on the `.cm-header-N` *span*, and an explicit colour on an element beats one inherited from its line — so colouring the line could never turn heading text black. That was first "fixed" by targeting the spans, which turned a long-inert option into a visible effect nobody had asked for; the option was then defaulted to off, which did not help either, because **changing a default cannot reach an install that already has the key saved** — the plugin writes the whole settings object on every save, so an existing `data.json` pins the old value. The option and its rules are gone instead: `activeSection` excludes headings with `:not(.HyperMD-header)` and contains no selector whose subject is a heading line, so headings are structurally immune rather than conditionally immune. The same removal also stopped the strikethrough-hiding from reaching headings, which it previously did even with the option off.
 
 **Moving a section is a behaviour change, not a formatting one.**
+
+### The vertical rule follows the *outermost* list, not the line's own marker
+
+The purple rule is drawn for a line when the list that line ultimately belongs to is rooted in an unordered list — whatever its nested levels are — and not at all when the root is ordered. The previous rule keyed off the line's own marker, so an ordered item nested in an unordered list broke the rule, and an unordered item nested in an ordered list grew a stray segment.
+
+Live Preview makes this awkward: lines are flat siblings and the DOM contains no record of which list a line belongs to. CSS can see a line's own marker kind and nothing more. So the structure is recovered in three steps — `src/listroot.ts` scans the text and decides each line's outermost list kind (pure logic, no DOM, and therefore fully testable), `src/editor.ts` turns that into a CodeMirror line decoration adding a `style-toolkit-ul-root` class, and the stylesheet keys off the class. Reading view needs none of it, because the nesting there is real DOM and `:not(ul ul):not(ol ul)` expresses "outermost" directly.
+
+The CodeMirror modules are taken from Obsidian's own registry at runtime and are deliberately **not bundled**: Obsidian throws on decorations built from a second copy of `@codemirror/state` ("multiple instances ... breaking instanceof checks"). The built file contains `require("@codemirror/view")` and no CodeMirror code. If that registry is ever unavailable, the rule falls back to the old marker-based selectors — broken by nesting, but present — and logs why.
 
 Every other default reproduces the snippet it replaces, so installing changes nothing you were already looking at. Three spots where the original snippets contradicted themselves were unified, and they are listed in the Chinese section above.
 

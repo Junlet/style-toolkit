@@ -25,7 +25,57 @@ __export(main_exports, {
 module.exports = __toCommonJS(main_exports);
 var import_obsidian3 = require("obsidian");
 
+// src/listroot.ts
+var LIST_ROOT_CLASS = "style-toolkit-ul-root";
+var LIST_MARKER = /^([ \t]*)([-*+]|\d+[.)])([ \t]+|$)/;
+var QUOTE_PREFIX = /^(?:[ \t]*>[ \t]?)*/;
+var TAB_WIDTH = 4;
+function indentWidth(text) {
+  let width = 0;
+  for (const ch of text) {
+    width += ch === "	" ? TAB_WIDTH : 1;
+  }
+  return width;
+}
+function computeListRoots(lines) {
+  var _a, _b, _c, _d, _e;
+  const out = new Array(lines.length).fill(null);
+  const stack = [];
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    if (raw.trim() === "") continue;
+    const quote = (_b = (_a = QUOTE_PREFIX.exec(raw)) == null ? void 0 : _a[0]) != null ? _b : "";
+    const body = raw.slice(quote.length);
+    const quoteDepth = ((_c = quote.match(/>/g)) != null ? _c : []).length;
+    const match = LIST_MARKER.exec(body);
+    const lead = match ? match[1] : (_e = (_d = /^[ \t]*/.exec(body)) == null ? void 0 : _d[0]) != null ? _e : "";
+    const indent = indentWidth(lead) + quoteDepth * TAB_WIDTH;
+    if (match) {
+      while (stack.length > 0 && stack[stack.length - 1].content > indent) {
+        stack.pop();
+      }
+      const marker = match[2];
+      stack.push({
+        indent,
+        content: indent + marker.length + Math.max(1, match[3].length),
+        type: /^[-*+]$/.test(marker) ? "ul" : "ol"
+      });
+      out[i] = stack[0].type;
+      continue;
+    }
+    while (stack.length > 0 && indent < stack[stack.length - 1].content) {
+      stack.pop();
+    }
+    out[i] = stack.length > 0 ? stack[0].type : null;
+  }
+  return out;
+}
+function splitLines(text) {
+  return text.split("\n");
+}
+
 // src/css.ts
+var DEFAULT_BUILD_OPTIONS = { listRootClass: true };
 function num(n) {
   return String(Math.round(n * 1e4) / 1e4);
 }
@@ -222,7 +272,7 @@ ${scope} .cm-code`, {
   }
   return section("光标所在行 / Active line", join(parts));
 }
-function listSection(s) {
+function listSection(s, options) {
   const parts = [];
   if (s.listSizeEnabled) {
     const sizes = LEVELS.map(
@@ -255,23 +305,36 @@ ${readingList("ol", level)}`,
     });
   }
   if (s.ulLineEnabled) {
+    const border = `${px(s.ulLineWidth)} solid ${s.ulLineColor}`;
     parts.push(
-      rule(".markdown-preview-view ul:not(ul ul)", {
-        "border-left": `${px(s.ulLineWidth)} solid ${s.ulLineColor}`,
+      rule(".markdown-preview-view ul:not(ul ul):not(ol ul)", {
+        "border-left": border,
         "padding-left": em(s.ulLinePaddingRead)
-      }),
-      rule(
-        ".markdown-source-view.mod-cm6 .HyperMD-list-line:has(.cm-formatting-list-ul)",
-        {
-          "border-left": `${px(s.ulLineWidth)} solid ${s.ulLineColor}`,
-          "margin-left": "0"
-        }
-      ),
-      rule(
-        ".markdown-source-view.mod-cm6 .HyperMD-list-line-1:has(.cm-formatting-list-ul)",
-        { "padding-left": em(s.ulLinePaddingEdit), "text-indent": "0" }
-      )
+      })
     );
+    if (options.listRootClass) {
+      parts.push(
+        rule(`.markdown-source-view.mod-cm6 .${LIST_ROOT_CLASS}`, {
+          "border-left": border,
+          "margin-left": "0"
+        }),
+        rule(
+          `.markdown-source-view.mod-cm6 .HyperMD-list-line-1.${LIST_ROOT_CLASS}`,
+          { "padding-left": em(s.ulLinePaddingEdit), "text-indent": "0" }
+        )
+      );
+    } else {
+      parts.push(
+        rule(
+          ".markdown-source-view.mod-cm6 .HyperMD-list-line:has(.cm-formatting-list-ul)",
+          { "border-left": border, "margin-left": "0" }
+        ),
+        rule(
+          ".markdown-source-view.mod-cm6 .HyperMD-list-line-1:has(.cm-formatting-list-ul)",
+          { "padding-left": em(s.ulLinePaddingEdit), "text-indent": "0" }
+        )
+      );
+    }
   }
   if (s.ulMarkerHideEnabled) {
     parts.push(
@@ -718,13 +781,13 @@ function uiSection(s) {
   }
   return section("界面 / Interface", join(parts));
 }
-function buildCss(s) {
+function buildCss(s, options = DEFAULT_BUILD_OPTIONS) {
   if (!s.masterEnabled) {
     return "/* Style Toolkit: disabled */\n";
   }
   const blocks = [
     s.groupText && textSection(s),
-    s.groupList && listSection(s),
+    s.groupList && listSection(s, options),
     s.groupHeading && headingSection(s),
     s.groupLink && linkSection(s),
     s.groupCode && codeSection(s),
@@ -741,6 +804,80 @@ function buildCss(s) {
     s.groupCallout && calloutSection(s)
   ].filter((b) => Boolean(b && b.trim()));
   return "/* Style Toolkit -- generated from your settings. Edits here are overwritten. */\n\n" + blocks.join("\n\n\n") + "\n";
+}
+
+// src/editor.ts
+function loadCodeMirror() {
+  try {
+    const view = require("@codemirror/view");
+    const state = require("@codemirror/state");
+    if (!(view == null ? void 0 : view.ViewPlugin) || !(view == null ? void 0 : view.Decoration) || !(state == null ? void 0 : state.RangeSetBuilder)) {
+      return null;
+    }
+    return {
+      ViewPlugin: view.ViewPlugin,
+      Decoration: view.Decoration,
+      RangeSetBuilder: state.RangeSetBuilder
+    };
+  } catch (error) {
+    console.error(
+      "[style-toolkit] CodeMirror 接口不可用，列表竖线退回按符号判断。",
+      error
+    );
+    return null;
+  }
+}
+function createListRootExtension() {
+  const cm = loadCodeMirror();
+  if (!cm) return null;
+  const { ViewPlugin, Decoration, RangeSetBuilder } = cm;
+  class ListRootDecorator {
+    constructor(view) {
+      this.decorations = null;
+      /** The document the analysis was computed from, for caching. */
+      this.analysed = null;
+      /** One entry per line of `analysed`. */
+      this.roots = [];
+      this.rebuild(view);
+    }
+    update(update) {
+      if (update.docChanged || update.viewportChanged) {
+        this.rebuild(update.view);
+      }
+    }
+    /**
+     * Recomputes the analysis when the text changed, then decorates the
+     * lines currently on screen.
+     *
+     * @param view - The editor view.
+     */
+    rebuild(view) {
+      const doc = view.state.doc;
+      if (doc !== this.analysed) {
+        this.analysed = doc;
+        this.roots = computeListRoots(splitLines(doc.toString()));
+      }
+      const builder = new RangeSetBuilder();
+      for (let pos = view.viewport.from; pos <= view.viewport.to; ) {
+        const line = doc.lineAt(pos);
+        if (this.roots[line.number - 1] === "ul") {
+          builder.add(
+            line.from,
+            line.from,
+            Decoration.line({ class: LIST_ROOT_CLASS })
+          );
+        }
+        pos = line.to + 1;
+      }
+      this.decorations = builder.finish();
+    }
+  }
+  return ViewPlugin.fromClass(
+    ListRootDecorator,
+    {
+      decorations: (instance) => instance.decorations
+    }
+  );
 }
 
 // src/settings.ts
@@ -1920,9 +2057,26 @@ var StyleToolkitPlugin = class extends import_obsidian3.Plugin {
     this.saveTimer = null;
     /** Registered tabs, so a reset can put the controls back to their defaults. */
     this.tabs = [];
+    /**
+     * Whether the Live Preview line decorations could be installed.
+     *
+     * The stylesheet has to know: with them the list rule keys off a class the
+     * editor puts on whole list blocks, without them it falls back to the line's
+     * own marker, which cannot see through a nested list of the other kind.
+     */
+    this.listRootReady = false;
+  }
+  /** How the stylesheet should be built for this host. */
+  get buildOptions() {
+    return { listRootClass: this.listRootReady };
   }
   async onload() {
     await this.loadSettings();
+    const listRoot = createListRootExtension();
+    if (listRoot) {
+      this.listRootReady = true;
+      this.registerEditorExtension(listRoot);
+    }
     this.styleEl = document.createElement("style");
     this.styleEl.id = STYLE_EL_ID;
     document.head.appendChild(this.styleEl);
@@ -1947,7 +2101,7 @@ var StyleToolkitPlugin = class extends import_obsidian3.Plugin {
   /** Rewrites the injected stylesheet from the current settings. */
   applyStyles() {
     if (!this.styleEl) return;
-    this.styleEl.textContent = buildCss(this.settings);
+    this.styleEl.textContent = buildCss(this.settings, this.buildOptions);
   }
   /**
    * Called by every settings row: repaint immediately, persist shortly after.
@@ -1965,7 +2119,7 @@ var StyleToolkitPlugin = class extends import_obsidian3.Plugin {
   }
   /** Puts the generated CSS on the clipboard, for reuse as a snippet. */
   async copyCss() {
-    const css = buildCss(this.settings);
+    const css = buildCss(this.settings, this.buildOptions);
     try {
       await navigator.clipboard.writeText(css);
       new import_obsidian3.Notice(`已复制生成的 CSS（${css.length} 个字符）。`);

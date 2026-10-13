@@ -21,7 +21,8 @@
  */
 
 import { Notice, Plugin } from "obsidian";
-import { buildCss } from "./css";
+import { buildCss, type BuildOptions } from "./css";
+import { createListRootExtension } from "./editor";
 import type { SettingHost } from "./rows";
 import {
 	DEFAULT_SETTINGS,
@@ -56,8 +57,33 @@ export default class StyleToolkitPlugin extends Plugin implements SettingHost {
 	/** Registered tabs, so a reset can put the controls back to their defaults. */
 	private readonly tabs: ToolkitTab[] = [];
 
+	/**
+	 * Whether the Live Preview line decorations could be installed.
+	 *
+	 * The stylesheet has to know: with them the list rule keys off a class the
+	 * editor puts on whole list blocks, without them it falls back to the line's
+	 * own marker, which cannot see through a nested list of the other kind.
+	 */
+	private listRootReady = false;
+
+	/** How the stylesheet should be built for this host. */
+	private get buildOptions(): BuildOptions {
+		return { listRootClass: this.listRootReady };
+	}
+
 	async onload(): Promise<void> {
 		await this.loadSettings();
+
+		// Before the stylesheet, because the stylesheet depends on it.
+		const listRoot = createListRootExtension();
+		if (listRoot) {
+			this.listRootReady = true;
+			// The cast is because `Extension` is declared in @codemirror/state,
+			// which this package deliberately does not depend on: the extension
+			// is built at runtime from Obsidian's own CodeMirror instance, so
+			// that its `instanceof` checks keep working.
+			this.registerEditorExtension(listRoot as never);
+		}
 
 		this.styleEl = document.createElement("style");
 		this.styleEl.id = STYLE_EL_ID;
@@ -87,7 +113,7 @@ export default class StyleToolkitPlugin extends Plugin implements SettingHost {
 	/** Rewrites the injected stylesheet from the current settings. */
 	private applyStyles(): void {
 		if (!this.styleEl) return;
-		this.styleEl.textContent = buildCss(this.settings);
+		this.styleEl.textContent = buildCss(this.settings, this.buildOptions);
 	}
 
 	/**
@@ -107,7 +133,7 @@ export default class StyleToolkitPlugin extends Plugin implements SettingHost {
 
 	/** Puts the generated CSS on the clipboard, for reuse as a snippet. */
 	async copyCss(): Promise<void> {
-		const css = buildCss(this.settings);
+		const css = buildCss(this.settings, this.buildOptions);
 		try {
 			await navigator.clipboard.writeText(css);
 			new Notice(`已复制生成的 CSS（${css.length} 个字符）。`);

@@ -51,7 +51,22 @@
  * rules. Moving a section is a behaviour change, not a cosmetic one.
  */
 
+import { LIST_ROOT_CLASS } from "./listroot";
 import type { StyleToolkitSettings } from "./settings";
+
+/** Options that depend on the host rather than on the saved settings. */
+export interface BuildOptions {
+	/**
+	 * Whether the Live Preview editor extension is installed.
+	 *
+	 * When it is not, the list rule falls back to keying off the line's own
+	 * marker, which cannot see through a nested list of the other kind.
+	 */
+	listRootClass: boolean;
+}
+
+/** What is used when no options are passed (the tests, the CSS export). */
+const DEFAULT_BUILD_OPTIONS: BuildOptions = { listRootClass: true };
 
 /** A declaration value. Falsy entries are dropped. */
 type Value = string | number | false | null | undefined;
@@ -439,7 +454,10 @@ function activeSection(s: StyleToolkitSettings): string {
  * @param s - Settings.
  * @returns The section.
  */
-function listSection(s: StyleToolkitSettings): string {
+function listSection(
+	s: StyleToolkitSettings,
+	options: BuildOptions
+): string {
 	const parts: Array<string | false> = [];
 
 	if (s.listSizeEnabled) {
@@ -473,23 +491,49 @@ function listSection(s: StyleToolkitSettings): string {
 	}
 
 	if (s.ulLineEnabled) {
+		const border = `${px(s.ulLineWidth)} solid ${s.ulLineColor}`;
+		// Reading view: the nesting is real DOM here, so the outermost list can
+		// be identified with plain selectors. The two `:not()` clauses are what
+		// express "outermost": a `ul` that sits inside a `ul` or an `ol` is not
+		// the root, and the root's kind is what decides whether the rule is
+		// drawn at all.
 		parts.push(
-			rule(".markdown-preview-view ul:not(ul ul)", {
-				"border-left": `${px(s.ulLineWidth)} solid ${s.ulLineColor}`,
+			rule(".markdown-preview-view ul:not(ul ul):not(ol ul)", {
+				"border-left": border,
 				"padding-left": em(s.ulLinePaddingRead),
-			}),
-			rule(
-				".markdown-source-view.mod-cm6 .HyperMD-list-line:has(.cm-formatting-list-ul)",
-				{
-					"border-left": `${px(s.ulLineWidth)} solid ${s.ulLineColor}`,
-					"margin-left": "0",
-				}
-			),
-			rule(
-				".markdown-source-view.mod-cm6 .HyperMD-list-line-1:has(.cm-formatting-list-ul)",
-				{ "padding-left": em(s.ulLinePaddingEdit), "text-indent": "0" }
-			)
+			})
 		);
+
+		// Live Preview: lines are flat siblings, so the outermost kind is not
+		// in the DOM. The editor extension analyses the text and marks the right
+		// lines with a class (see src/editor.ts).
+		if (options.listRootClass) {
+			parts.push(
+				rule(`.markdown-source-view.mod-cm6 .${LIST_ROOT_CLASS}`, {
+					"border-left": border,
+					"margin-left": "0",
+				}),
+				rule(
+					`.markdown-source-view.mod-cm6 .HyperMD-list-line-1.${LIST_ROOT_CLASS}`,
+					{ "padding-left": em(s.ulLinePaddingEdit), "text-indent": "0" }
+				)
+			);
+		} else {
+			// Fallback for the case where the editor extension could not be
+			// installed. This is the older, marker-based rule: it only covers
+			// lines that are themselves unordered, so a nested ordered line
+			// breaks the rule -- worse, but better than losing it entirely.
+			parts.push(
+				rule(
+					".markdown-source-view.mod-cm6 .HyperMD-list-line:has(.cm-formatting-list-ul)",
+					{ "border-left": border, "margin-left": "0" }
+				),
+				rule(
+					".markdown-source-view.mod-cm6 .HyperMD-list-line-1:has(.cm-formatting-list-ul)",
+					{ "padding-left": em(s.ulLinePaddingEdit), "text-indent": "0" }
+				)
+			);
+		}
 	}
 
 	if (s.ulMarkerHideEnabled) {
@@ -1055,14 +1099,17 @@ function uiSection(s: StyleToolkitSettings): string {
  * @param s - Settings.
  * @returns CSS text, ready to drop into a `<style>` element.
  */
-export function buildCss(s: StyleToolkitSettings): string {
+export function buildCss(
+	s: StyleToolkitSettings,
+	options: BuildOptions = DEFAULT_BUILD_OPTIONS
+): string {
 	if (!s.masterEnabled) {
 		return "/* Style Toolkit: disabled */\n";
 	}
 
 	const blocks = [
 		s.groupText && textSection(s),
-		s.groupList && listSection(s),
+		s.groupList && listSection(s, options),
 		s.groupHeading && headingSection(s),
 		s.groupLink && linkSection(s),
 		s.groupCode && codeSection(s),
