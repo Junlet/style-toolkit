@@ -116,38 +116,6 @@ function textSection(s) {
       })
     );
   }
-  if (s.activeLineEnabled) {
-    const c = s.activeLineColor;
-    const selectors = [];
-    if (s.activeLineList) {
-      selectors.push(".cm-line.cm-active.HyperMD-list-line");
-    }
-    if (s.activeLineParagraph) {
-      selectors.push(
-        ".cm-line.cm-active:not(.HyperMD-header):not(.HyperMD-list-line)"
-      );
-    }
-    if (s.activeLineHeading) {
-      selectors.push(".cm-line.cm-active.HyperMD-header");
-    }
-    if (selectors.length > 0) {
-      parts.push(rule(selectors.join(",\n"), { color: c }));
-    }
-  }
-  if (s.activeStrikeHideEnabled) {
-    const c = s.activeStrikeColor;
-    const scope = ".cm-line.cm-active";
-    parts.push(
-      rule(`${scope} .cm-strikethrough,
-${scope} del`, {
-        "text-decoration": "none",
-        color: c
-      }),
-      rule(`${scope} .cm-inline-code`, {
-        "background-color": s.inlineCodeBackground
-      })
-    );
-  }
   if (s.emphasisEnabled) {
     parts.push(
       rule(".cm-em,\n.markdown-preview-view em", {
@@ -220,6 +188,50 @@ ${scope} del`, {
     );
   }
   return section("文字与强调 / Text & emphasis", join(parts));
+}
+function activeSection(s) {
+  const parts = [];
+  const colour2 = s.activeLineColor;
+  if (s.activeLineEnabled) {
+    const selectors = [];
+    if (s.activeLineList) {
+      selectors.push(".cm-line.cm-active.HyperMD-list-line");
+    }
+    if (s.activeLineParagraph) {
+      selectors.push(
+        ".cm-line.cm-active:not(.HyperMD-header):not(.HyperMD-list-line)"
+      );
+    }
+    if (s.activeLineHeading) {
+      selectors.push(".cm-line.cm-active.HyperMD-header");
+    }
+    if (selectors.length > 0) {
+      parts.push(rule(selectors.join(",\n"), { color: colour2 }));
+    }
+    if (s.activeLineHeading) {
+      parts.push(
+        rule(
+          ".cm-line.cm-active.HyperMD-header .cm-header,\n.cm-line.cm-active.HyperMD-header .cm-formatting-header",
+          { color: colour2 }
+        )
+      );
+    }
+  }
+  if (s.activeStrikeHideEnabled) {
+    const scope = ".cm-line.cm-active";
+    parts.push(
+      rule(`${scope} .cm-strikethrough,
+${scope} del`, {
+        "text-decoration": "none",
+        color: s.activeStrikeColor
+      }),
+      rule(`${scope} .cm-inline-code,
+${scope} .cm-code`, {
+        "background-color": s.inlineCodeBackground
+      })
+    );
+  }
+  return section("光标所在行 / Active line", join(parts));
 }
 function listSection(s) {
   const parts = [];
@@ -726,9 +738,18 @@ function buildCss(s) {
     s.groupList && listSection(s),
     s.groupHeading && headingSection(s),
     s.groupLink && linkSection(s),
-    s.groupCallout && calloutSection(s),
     s.groupCode && codeSection(s),
-    s.groupUi && uiSection(s)
+    s.groupUi && uiSection(s),
+    // These two come last on purpose, and the order is load-bearing:
+    //
+    //   - the active-line rules tie on specificity with the list-level and
+    //     heading colours they have to override, so they must be emitted
+    //     after them or they silently lose the tie;
+    //   - the callout-scoped active-line rule has to beat the generic one,
+    //     so callouts come after that again. Every rule in the callout
+    //     section is `.callout`-scoped, so it cannot leak outwards.
+    s.groupText && activeSection(s),
+    s.groupCallout && calloutSection(s)
   ].filter((b) => Boolean(b && b.trim()));
   return "/* Style Toolkit -- generated from your settings. Edits here are overwritten. */\n\n" + blocks.join("\n\n\n") + "\n";
 }

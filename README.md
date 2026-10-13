@@ -87,6 +87,21 @@ Obsidian 自己是**用 `padding`（`--list-spacing`）做行距**的，不是 m
 
 所以原来那个「编辑时当前行不画虚线」的开关**已经移除**：它不再是可选项，而是编辑器能正常工作的前提。
 
+### 分节顺序是有意义的，不要随便挪
+
+这套样式大量使用 `!important`，但**真正会冲突的那些规则特异性完全相同**（两边都是三个 class）。这时 `!important` 不解决问题 —— **谁在样式表里靠后谁赢**。
+
+所以「光标所在行」被单独排在**倒数第二节**，这是必需的：
+
+- 它要把文字压成黑色，而**列表的层级灰度**和它是平手的（都是三个 class），必须排在后面才压得住
+- **Callout** 那一节排在最后，是为了让 Callout 内部的「光标所在行变浅」压过全局的「变黑」
+
+> **移动任何一节都是行为变更，不是排版调整。**
+>
+> 具体后果：在 v1.3.0 及更早版本里，**光标停在列表行上时文字不会变黑**（被层级灰压住了），而删除线却能变黑 —— 因为删除线那条是后代选择器（`.cm-line.cm-active .cm-strikethrough`），特异性真的更高。这个"只有一部分生效"的假象，正是顺序问题最难察觉的地方。
+
+还有一处相关的修复：标题的颜色是画在 `.cm-header-N` **span** 上的，而元素上的显式颜色**优先于从行继承的颜色** —— 所以只给行上色，标题文字永远不会变黑。现在「对标题行生效」会直接打到标题的 span 和 `##` 标记上。
+
 ### 和 CSS 片段一起用会怎样
 
 会**双重叠加**。装了插件并把原来的片段也打开，同一套样式会被应用两次（虽然结果通常看不出来，因为值一样）。
@@ -161,6 +176,14 @@ Settings are split across seven tabs — Overview (master switch, seven section 
 - **The heading leader only applies to the line you are *not* editing.** Building it needs `display: flex` on the line, and that is scoped to `:not(.cm-active)`. It has to be: an empty heading span inside a flex container generates no line box, so CodeMirror has no box to draw the caret in and it drops below the text — which made H2 and deeper headings impossible to type at all, because the caret fell away the moment the second `#` completed the marker. Reading view is unaffected (`hN` is a real block there). The old "hide the dash while editing" toggle is gone, since it is no longer optional.
 
 Also removed: `代码块字体大小.css`, which set `--code-size: 0.5em` and halved every piece of inline code. Code block sizing is a setting of its own, keeping its current 0.8em default.
+
+### Section order is load-bearing
+
+The sheet leans on `!important`, but the rules that actually collide do so at *identical* specificity — three classes on each side — where `!important` settles nothing and the later rule simply wins. That is why the active-line rules sit in their own section second from the end: they have to beat the list-level greys, which tie with them, and the callout section has to come after *them* so the callout-scoped "fade the active line" beats the generic "make it black". In v1.3.0 and earlier the active list line therefore never turned black — while a struck-through line did, because `.cm-line.cm-active .cm-strikethrough` is a descendant selector and genuinely more specific. That "only some of it works" appearance is what makes an ordering bug hard to spot.
+
+Relatedly, heading colours are painted on the `.cm-header-N` *span*, and an explicit colour on an element beats one inherited from its line — so colouring the line alone could never turn heading text black. The "headings too" option now targets those spans (and the `##` marker spans) directly.
+
+**Moving a section is a behaviour change, not a formatting one.**
 
 Every other default reproduces the snippet it replaces, so installing changes nothing you were already looking at. Three spots where the original snippets contradicted themselves were unified, and they are listed in the Chinese section above.
 

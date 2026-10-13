@@ -40,6 +40,15 @@
  * made it impossible to type H2 and deeper headings at all -- the caret fell to
  * the next line the moment the second `#` completed the marker. Reading view is
  * unaffected because `hN` is a real block element there.
+ *
+ * SECTION ORDER IS LOAD-BEARING
+ * -----------------------------
+ * Most of these rules use `!important`, and the ones that collide do so at
+ * equal specificity -- three classes on both sides. When that happens the later
+ * rule wins, so the order of the sections decides the outcome. In particular
+ * the active-line rules (see `activeSection`) must come after the list and
+ * heading colours, and the callout section must come after the active-line
+ * rules. Moving a section is a behaviour change, not a cosmetic one.
  */
 
 import type { StyleToolkitSettings } from "./settings";
@@ -273,39 +282,6 @@ function textSection(s: StyleToolkitSettings): string {
 		);
 	}
 
-	if (s.activeLineEnabled) {
-		const c = s.activeLineColor;
-		const selectors: string[] = [];
-		if (s.activeLineList) {
-			selectors.push(".cm-line.cm-active.HyperMD-list-line");
-		}
-		if (s.activeLineParagraph) {
-			selectors.push(
-				".cm-line.cm-active:not(.HyperMD-header):not(.HyperMD-list-line)"
-			);
-		}
-		if (s.activeLineHeading) {
-			selectors.push(".cm-line.cm-active.HyperMD-header");
-		}
-		if (selectors.length > 0) {
-			parts.push(rule(selectors.join(",\n"), { color: c }));
-		}
-	}
-
-	if (s.activeStrikeHideEnabled) {
-		const c = s.activeStrikeColor;
-		const scope = ".cm-line.cm-active";
-		parts.push(
-			rule(`${scope} .cm-strikethrough,\n${scope} del`, {
-				"text-decoration": "none",
-				color: c,
-			}),
-			rule(`${scope} .cm-inline-code`, {
-				"background-color": s.inlineCodeBackground,
-			})
-		);
-	}
-
 	if (s.emphasisEnabled) {
 		parts.push(
 			rule(".cm-em,\n.markdown-preview-view em", {
@@ -385,6 +361,79 @@ function textSection(s: StyleToolkitSettings): string {
 	}
 
 	return section("文字与强调 / Text & emphasis", join(parts));
+}
+
+/**
+ * The active-line rules: the line under the caret turns black, and its
+ * strikethrough is hidden.
+ *
+ * WHY THIS IS ITS OWN SECTION, EMITTED LAST
+ * -----------------------------------------
+ * These rules set a colour on the line itself. The list-level colours and the
+ * heading colours are declared at the *same* specificity -- three classes each
+ * -- and both sides use `!important`, so the only thing that decides is which
+ * comes later in the sheet.
+ *
+ * They used to live inside the text section, which is emitted *before* the list
+ * section. So for a list line the level grey came later, won the tie, and the
+ * line under the caret never turned black. (Strikethrough kept working because
+ * `.cm-line.cm-active .cm-strikethrough` is a descendant selector and therefore
+ * genuinely more specific -- which is exactly why the bug looked so selective.)
+ *
+ * @param s - Settings.
+ * @returns The section.
+ */
+function activeSection(s: StyleToolkitSettings): string {
+	const parts: Array<string | false> = [];
+	const colour = s.activeLineColor;
+
+	if (s.activeLineEnabled) {
+		const selectors: string[] = [];
+		if (s.activeLineList) {
+			selectors.push(".cm-line.cm-active.HyperMD-list-line");
+		}
+		if (s.activeLineParagraph) {
+			selectors.push(
+				".cm-line.cm-active:not(.HyperMD-header):not(.HyperMD-list-line)"
+			);
+		}
+		if (s.activeLineHeading) {
+			selectors.push(".cm-line.cm-active.HyperMD-header");
+		}
+		if (selectors.length > 0) {
+			parts.push(rule(selectors.join(",\n"), { color: colour }));
+		}
+
+		// A heading paints its colour onto the `.cm-header-N` span, and an
+		// explicit colour on an element beats one inherited from its line. So
+		// colouring the line alone leaves heading text untouched, and the
+		// "headings too" option would do nothing visible. The spans have to be
+		// reached directly.
+		if (s.activeLineHeading) {
+			parts.push(
+				rule(
+					".cm-line.cm-active.HyperMD-header .cm-header,\n" +
+						".cm-line.cm-active.HyperMD-header .cm-formatting-header",
+					{ color: colour }
+				)
+			);
+		}
+	}
+
+	if (s.activeStrikeHideEnabled) {
+		const scope = ".cm-line.cm-active";
+		parts.push(
+			rule(`${scope} .cm-strikethrough,\n${scope} del`, {
+				"text-decoration": "none",
+				color: s.activeStrikeColor,
+			}),
+			rule(`${scope} .cm-inline-code,\n${scope} .cm-code`, {
+				"background-color": s.inlineCodeBackground,
+			})
+		);
+	}
+
+	return section("光标所在行 / Active line", join(parts));
 }
 
 /**
@@ -1019,9 +1068,18 @@ export function buildCss(s: StyleToolkitSettings): string {
 		s.groupList && listSection(s),
 		s.groupHeading && headingSection(s),
 		s.groupLink && linkSection(s),
-		s.groupCallout && calloutSection(s),
 		s.groupCode && codeSection(s),
 		s.groupUi && uiSection(s),
+		// These two come last on purpose, and the order is load-bearing:
+		//
+		//   - the active-line rules tie on specificity with the list-level and
+		//     heading colours they have to override, so they must be emitted
+		//     after them or they silently lose the tie;
+		//   - the callout-scoped active-line rule has to beat the generic one,
+		//     so callouts come after that again. Every rule in the callout
+		//     section is `.callout`-scoped, so it cannot leak outwards.
+		s.groupText && activeSection(s),
+		s.groupCallout && calloutSection(s),
 	].filter((b): b is string => Boolean(b && b.trim()));
 
 	return (
