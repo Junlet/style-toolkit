@@ -1,0 +1,18 @@
+/*
+ * Style Toolkit
+ *
+ * The plugin's styling is generated at runtime and injected as
+ * <style id="style-toolkit-styles">, so this file only holds the chrome that
+ * the settings pane itself needs.
+ */
+
+.style-toolkit-note {
+	margin: -0.25em 0 1em;
+	padding: 0.6em 0.75em;
+	border-left: 3px solid var(--interactive-accent);
+	border-radius: var(--radius-s);
+	background-color: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.5;
+}
