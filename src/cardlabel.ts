@@ -32,6 +32,11 @@
  */
 
 import type { App } from "obsidian";
+import {
+	displayFileName,
+	truncateText,
+	type FileNameLabelOptions,
+} from "./filenames";
 
 /** Class on the label element this module inserts. */
 export const LABEL_CLASS = "stk-card-label";
@@ -60,28 +65,52 @@ interface CanvasLike {
 	nodes?: Map<string, CanvasNodeLike>;
 }
 
+/** What the labeller has been asked to do. */
+export interface LabelOptions {
+	/** Text-card labels, or `null` when that feature is off. */
+	textCards: { maxChars: number } | null;
+	/** File-name rewriting, or `null` when nothing would change. */
+	fileNames: FileNameLabelOptions | null;
+}
+
+/** What was written into one file node's placeholder. */
+interface FileNameState {
+	/** The name Obsidian produced, before our edits. */
+	original: string;
+	/** What we last wrote back. */
+	written: string;
+}
+
 /**
- * Cuts a label down to `maxChars` characters.
+ * Reads a node's kind.
  *
- * Counts by **code point**, not UTF-16 unit, so an emoji or any other astral
- * character is dropped whole instead of being split into two broken halves.
- * (`Array.from` on a string iterates code points.) Combining marks and emoji
- * ZWJ sequences can still be separated -- that needs `Intl.Segmenter`, which is
- * not worth it for a canvas thumbnail label.
+ * @param node - Candidate Canvas node.
+ * @returns The `type` from `getData()`, or `undefined` when unreadable.
+ */
+function nodeType(node: CanvasNodeLike): unknown {
+	if (typeof node.getData !== "function") return undefined;
+	try {
+		return node.getData()?.type;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Cuts the first line down to `maxChars` code points.
  *
- * No ellipsis is appended: the label sits in a box that already clips
- * (`overflow: hidden`), so a trailing "…" would only steal one of the
- * characters the user explicitly asked for.
+ * Delegates to {@link truncateText} in `"chars"` mode, which counts code points
+ * rather than UTF-16 units, so an emoji is kept or dropped whole. (Text cards
+ * deliberately count characters, not widths: a card's first line is prose, and
+ * "show 5 characters" is the unit a reader expects there. The file-name label
+ * offers width counting instead, because names are mixed with extensions.)
  *
  * @param text - The already-extracted first line.
  * @param maxChars - Character limit; `0` or negative means "no limit".
  * @returns The text, shortened if a positive limit was given.
  */
 function clip(text: string, maxChars: number): string {
-	if (!(maxChars > 0)) return text;
-	const characters = Array.from(text);
-	if (characters.length <= maxChars) return text;
-	return characters.slice(0, maxChars).join("");
+	return truncateText(text, maxChars, "chars");
 }
 
 /**
@@ -175,7 +204,16 @@ export function findCanvas(view: unknown): CanvasLike | null {
 	return null;
 }
 
-/** Keeps the labels in a Canvas drawing in sync with its text cards. */
+/**
+ * Keeps the labels on shrunk Canvas nodes in sync.
+ *
+ * Two jobs, both about the `.canvas-node-placeholder` Obsidian attaches when a
+ * node shrinks past its breakpoint:
+ *
+ *   - **text cards** get a first-line label, which Obsidian never supplies;
+ *   - **file nodes** keep Obsidian's own file name, but shortened and with the
+ *     suffixes the user asked to hide removed.
+ */
 export class CardLabeler {
 	/** Guards against two observers after a settings change. */
 	private observer: MutationObserver | null = null;
@@ -187,25 +225,34 @@ export class CardLabeler {
 	private warned = false;
 
 	/**
-	 * Character limit for the label text; `0` means "the whole first line".
+	 * What this pass has been asked to do.
 	 *
-	 * Kept on the instance because the debounced observer callback has no access
-	 * to the plugin's settings, and a scan without the current limit would put
-	 * the untruncated text back.
+	 * Held on the instance because the debounced observer callback has no access
+	 * to the plugin's settings, and a scan without the current limits would put
+	 * the untrimmed text back.
 	 */
-	private maxChars = 0;
+	private options: LabelOptions = { textCards: null, fileNames: null };
+
+	/**
+	 * For each file placeholder: the name Obsidian produced and what we wrote.
+	 *
+	 * Needed because we rewrite Obsidian's own text. Storing the original means
+	 * moving a slider re-truncates the *full* name instead of chopping an
+	 * already-chopped one, and turning the feature off can give the name back.
+	 */
+	private readonly fileStates = new WeakMap<HTMLElement, FileNameState>();
 
 	constructor(private readonly app: App) {}
 
 	/**
-	 * Turns the feature on: attaches any missing labels and starts watching.
+	 * Turns the feature on and applies the given options.
 	 *
 	 * Idempotent, so a settings slider can call it on every step.
 	 *
-	 * @param maxChars - Character limit for the label text; `0` = no limit.
+	 * @param options - Which parts to apply and with what limits.
 	 */
-	start(maxChars = 0): void {
-		this.maxChars = maxChars;
+	start(options: LabelOptions): void {
+		this.options = options;
 		if (!this.observer) {
 			this.observer = new MutationObserver(() => this.schedule());
 			this.observer.observe(document.body, {
@@ -217,9 +264,11 @@ export class CardLabeler {
 	}
 
 	/**
-	 * Turns the feature off: removes every label and the icon-hiding class.
+	 * Turns everything off and puts the DOM back the way Obsidian made it.
 	 *
-	 * The observer is disconnected too, so a disabled feature costs nothing.
+	 * Text-card labels are removed, file names are restored from the recorded
+	 * originals, and the observer is disconnected so a disabled feature costs
+	 * nothing.
 	 */
 	stop(): void {
 		this.observer?.disconnect();
@@ -232,6 +281,8 @@ export class CardLabeler {
 			placeholder?.classList.remove(LABEL_STATE_CLASS);
 			label.remove();
 		}
+		this.restoreFileNames();
+		this.options = { textCards: null, fileNames: null };
 	}
 
 	/** Releases everything; called from the plugin's unload hook. */
@@ -277,7 +328,7 @@ export class CardLabeler {
 	}
 
 	/**
-	 * Reconciles one node's label.
+	 * Reconciles one node's placeholder.
 	 *
 	 * Writing into a *detached* placeholder is fine and deliberate: Obsidian
 	 * re-attaches the same element when the node shrinks again, so the label is
@@ -289,14 +340,35 @@ export class CardLabeler {
 		const placeholder = node.placeholderEl;
 		if (!(placeholder instanceof HTMLElement)) return;
 
-		const text = textCardLabel(node, this.maxChars);
+		// A file node's placeholder text belongs to Obsidian (file name, plus a
+		// ` › heading` subpath). We only shorten or trim it. Every other kind --
+		// text cards, and anything whose type could not be read -- goes through
+		// the label path, which decides for itself whether there is anything to
+		// show.
+		if (nodeType(node) === "file") {
+			this.applyFileName(placeholder);
+			return;
+		}
+		this.applyTextCard(node, placeholder);
+	}
+
+	/**
+	 * Owns the placeholder of a text card.
+	 *
+	 * @param node - The Canvas node.
+	 * @param placeholder - Its placeholder element.
+	 */
+	private applyTextCard(node: CanvasNodeLike, placeholder: HTMLElement): void {
+		const limits = this.options.textCards;
+		const text = limits ? textCardLabel(node, limits.maxChars) : "";
 		const existing = placeholder.querySelector(
 			`:scope > .${LABEL_CLASS}`
 		) as HTMLElement | null;
 
 		if (text.length === 0) {
-			// Not a text card, or a card with nothing on its first line: put the
-			// placeholder back exactly as Obsidian made it.
+			// Not a text card, a card with nothing on its first line, or the
+			// feature was just turned off: put the placeholder back exactly as
+			// Obsidian made it.
 			existing?.remove();
 			placeholder.classList.remove(LABEL_STATE_CLASS);
 			return;
@@ -306,5 +378,62 @@ export class CardLabeler {
 		if (!existing) placeholder.appendChild(label);
 		if (label.textContent !== text) label.textContent = text;
 		placeholder.classList.add(LABEL_STATE_CLASS);
+	}
+
+	/**
+	 * Shortens or trims the file name Obsidian wrote into a placeholder.
+	 *
+	 * The text is only replaced, never rebuilt: keeping Obsidian's own string as
+	 * the input means the ` › heading` subpath, the missing-file message and any
+	 * future wording keep working. Placeholders holding element children are
+	 * left alone, so this can never eat markup it did not create.
+	 *
+	 * @param placeholder - The placeholder element.
+	 */
+	private applyFileName(placeholder: HTMLElement): void {
+		if (placeholder.children.length > 0) return;
+
+		const current = placeholder.textContent ?? "";
+		const previous = this.fileStates.get(placeholder);
+		// Anything other than what we last wrote came from Obsidian (a rename, a
+		// re-render), so it becomes the new original.
+		const original =
+			previous && current === previous.written ? previous.original : current;
+
+		const options = this.options.fileNames;
+		if (!options) {
+			if (previous && current === previous.written) {
+				placeholder.textContent = previous.original;
+			}
+			this.fileStates.delete(placeholder);
+			return;
+		}
+
+		if (original.trim().length === 0) {
+			this.fileStates.delete(placeholder);
+			return;
+		}
+
+		const display = displayFileName(original, options);
+		if (current !== display) placeholder.textContent = display;
+		this.fileStates.set(placeholder, { original, written: display });
+	}
+
+	/** Gives every rewritten file name its original text back. */
+	private restoreFileNames(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType("canvas")) {
+			const canvas = findCanvas(leaf.view);
+			if (!canvas?.nodes) continue;
+			for (const node of canvas.nodes.values()) {
+				const placeholder = node.placeholderEl;
+				if (!(placeholder instanceof HTMLElement)) continue;
+				const state = this.fileStates.get(placeholder);
+				if (!state) continue;
+				if ((placeholder.textContent ?? "") === state.written) {
+					placeholder.textContent = state.original;
+				}
+				this.fileStates.delete(placeholder);
+			}
+		}
 	}
 }

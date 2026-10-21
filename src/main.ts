@@ -23,6 +23,7 @@
 import { Notice, Plugin } from "obsidian";
 import { CardLabeler } from "./cardlabel";
 import { buildCss, type BuildOptions } from "./css";
+import { parseSuffixList } from "./filenames";
 import { createListRootExtension } from "./editor";
 import type { SettingHost } from "./rows";
 import {
@@ -145,11 +146,28 @@ export default class StyleToolkitPlugin extends Plugin implements SettingHost {
 	 */
 	private syncCardLabels(): void {
 		if (!this.cardLabeler) return;
-		if (this.settings.canvasTextCardLabelEnabled) {
-			this.cardLabeler.start(this.settings.canvasTextCardLabelMaxChars);
-		} else {
+
+		const textCards = this.settings.canvasTextCardLabelEnabled
+			? { maxChars: this.settings.canvasTextCardLabelMaxChars }
+			: null;
+
+		const suffixes = parseSuffixList(
+			this.settings.canvasPlaceholderStripSuffixes
+		);
+		const fileNames =
+			suffixes.length > 0 || this.settings.canvasPlaceholderMaxWidth > 0
+				? {
+						maxWidth: this.settings.canvasPlaceholderMaxWidth,
+						countMode: this.settings.canvasPlaceholderCountMode,
+						suffixes,
+					}
+				: null;
+
+		if (!textCards && !fileNames) {
 			this.cardLabeler.stop();
+			return;
 		}
+		this.cardLabeler.start({ textCards, fileNames });
 	}
 
 	/**

@@ -25,15 +25,91 @@ __export(main_exports, {
 module.exports = __toCommonJS(main_exports);
 var import_obsidian3 = require("obsidian");
 
+// src/filenames.ts
+function isWideCodePoint(codePoint) {
+  if (codePoint >= 4352 && codePoint <= 4447) return true;
+  if (codePoint >= 11904 && codePoint <= 12350) return true;
+  if (codePoint >= 12353 && codePoint <= 13311) return true;
+  if (codePoint >= 13312 && codePoint <= 19903) return true;
+  if (codePoint >= 19968 && codePoint <= 40959) return true;
+  if (codePoint >= 40960 && codePoint <= 42191) return true;
+  if (codePoint >= 43360 && codePoint <= 43391) return true;
+  if (codePoint >= 44032 && codePoint <= 55203) return true;
+  if (codePoint >= 63744 && codePoint <= 64255) return true;
+  if (codePoint >= 65040 && codePoint <= 65049) return true;
+  if (codePoint >= 65072 && codePoint <= 65135) return true;
+  if (codePoint >= 65280 && codePoint <= 65376) return true;
+  if (codePoint >= 65504 && codePoint <= 65510) return true;
+  if (codePoint >= 127744 && codePoint <= 128591) return true;
+  if (codePoint >= 128640 && codePoint <= 128767) return true;
+  if (codePoint >= 129280 && codePoint <= 129535) return true;
+  if (codePoint >= 131072 && codePoint <= 262141) return true;
+  return false;
+}
+function charWidth(codePoint) {
+  return isWideCodePoint(codePoint) ? 2 : 1;
+}
+var COUNT_MODES = ["width", "chars"];
+function truncateText(text, limit, countMode) {
+  var _a;
+  if (!(limit > 0)) return text;
+  const characters = Array.from(text);
+  if (countMode === "chars") {
+    return characters.length <= limit ? text : characters.slice(0, limit).join("");
+  }
+  let width = 0;
+  let kept = 0;
+  for (const character of characters) {
+    const step = charWidth((_a = character.codePointAt(0)) != null ? _a : 0);
+    if (kept > 0 && width + step > limit) break;
+    width += step;
+    kept += 1;
+  }
+  return kept === characters.length ? text : characters.slice(0, kept).join("");
+}
+function parseSuffixList(raw) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const part of raw.split(/[,\s]+/u)) {
+    const entry = part.trim().toLowerCase();
+    if (entry.length > 0) seen.add(entry);
+  }
+  return [...seen];
+}
+function stripSuffixes(name, suffixes) {
+  if (suffixes.length === 0) return name;
+  let result = name;
+  for (; ; ) {
+    const lower = result.toLowerCase();
+    const match = suffixes.find(
+      (suffix) => lower.endsWith(suffix) && lower.length > suffix.length
+    );
+    if (!match) return result;
+    result = result.slice(0, result.length - match.length);
+  }
+}
+function displayFileName(name, options) {
+  return truncateText(
+    stripSuffixes(name, options.suffixes),
+    options.maxWidth,
+    options.countMode
+  );
+}
+
 // src/cardlabel.ts
 var LABEL_CLASS = "stk-card-label";
 var LABEL_STATE_CLASS = "stk-has-card-label";
 var SCAN_DEBOUNCE_MS = 120;
+function nodeType(node) {
+  var _a;
+  if (typeof node.getData !== "function") return void 0;
+  try {
+    return (_a = node.getData()) == null ? void 0 : _a.type;
+  } catch (e) {
+    return void 0;
+  }
+}
 function clip(text, maxChars) {
-  if (!(maxChars > 0)) return text;
-  const characters = Array.from(text);
-  if (characters.length <= maxChars) return text;
-  return characters.slice(0, maxChars).join("");
+  return truncateText(text, maxChars, "chars");
 }
 function firstLineOf(raw, maxChars = 0) {
   for (const line of raw.split("\n")) {
@@ -87,23 +163,31 @@ var CardLabeler = class {
     /** Logged once, so a failed lookup does not spam the console. */
     this.warned = false;
     /**
-     * Character limit for the label text; `0` means "the whole first line".
+     * What this pass has been asked to do.
      *
-     * Kept on the instance because the debounced observer callback has no access
-     * to the plugin's settings, and a scan without the current limit would put
-     * the untruncated text back.
+     * Held on the instance because the debounced observer callback has no access
+     * to the plugin's settings, and a scan without the current limits would put
+     * the untrimmed text back.
      */
-    this.maxChars = 0;
+    this.options = { textCards: null, fileNames: null };
+    /**
+     * For each file placeholder: the name Obsidian produced and what we wrote.
+     *
+     * Needed because we rewrite Obsidian's own text. Storing the original means
+     * moving a slider re-truncates the *full* name instead of chopping an
+     * already-chopped one, and turning the feature off can give the name back.
+     */
+    this.fileStates = /* @__PURE__ */ new WeakMap();
   }
   /**
-   * Turns the feature on: attaches any missing labels and starts watching.
+   * Turns the feature on and applies the given options.
    *
    * Idempotent, so a settings slider can call it on every step.
    *
-   * @param maxChars - Character limit for the label text; `0` = no limit.
+   * @param options - Which parts to apply and with what limits.
    */
-  start(maxChars = 0) {
-    this.maxChars = maxChars;
+  start(options) {
+    this.options = options;
     if (!this.observer) {
       this.observer = new MutationObserver(() => this.schedule());
       this.observer.observe(document.body, {
@@ -114,9 +198,11 @@ var CardLabeler = class {
     this.refresh();
   }
   /**
-   * Turns the feature off: removes every label and the icon-hiding class.
+   * Turns everything off and puts the DOM back the way Obsidian made it.
    *
-   * The observer is disconnected too, so a disabled feature costs nothing.
+   * Text-card labels are removed, file names are restored from the recorded
+   * originals, and the observer is disconnected so a disabled feature costs
+   * nothing.
    */
   stop() {
     var _a;
@@ -130,6 +216,8 @@ var CardLabeler = class {
       placeholder == null ? void 0 : placeholder.classList.remove(LABEL_STATE_CLASS);
       label.remove();
     }
+    this.restoreFileNames();
+    this.options = { textCards: null, fileNames: null };
   }
   /** Releases everything; called from the plugin's unload hook. */
   destroy() {
@@ -169,7 +257,7 @@ var CardLabeler = class {
     }
   }
   /**
-   * Reconciles one node's label.
+   * Reconciles one node's placeholder.
    *
    * Writing into a *detached* placeholder is fine and deliberate: Obsidian
    * re-attaches the same element when the node shrinks again, so the label is
@@ -180,7 +268,21 @@ var CardLabeler = class {
   applyTo(node) {
     const placeholder = node.placeholderEl;
     if (!(placeholder instanceof HTMLElement)) return;
-    const text = textCardLabel(node, this.maxChars);
+    if (nodeType(node) === "file") {
+      this.applyFileName(placeholder);
+      return;
+    }
+    this.applyTextCard(node, placeholder);
+  }
+  /**
+   * Owns the placeholder of a text card.
+   *
+   * @param node - The Canvas node.
+   * @param placeholder - Its placeholder element.
+   */
+  applyTextCard(node, placeholder) {
+    const limits = this.options.textCards;
+    const text = limits ? textCardLabel(node, limits.maxChars) : "";
     const existing = placeholder.querySelector(
       `:scope > .${LABEL_CLASS}`
     );
@@ -193,6 +295,56 @@ var CardLabeler = class {
     if (!existing) placeholder.appendChild(label);
     if (label.textContent !== text) label.textContent = text;
     placeholder.classList.add(LABEL_STATE_CLASS);
+  }
+  /**
+   * Shortens or trims the file name Obsidian wrote into a placeholder.
+   *
+   * The text is only replaced, never rebuilt: keeping Obsidian's own string as
+   * the input means the ` › heading` subpath, the missing-file message and any
+   * future wording keep working. Placeholders holding element children are
+   * left alone, so this can never eat markup it did not create.
+   *
+   * @param placeholder - The placeholder element.
+   */
+  applyFileName(placeholder) {
+    var _a;
+    if (placeholder.children.length > 0) return;
+    const current = (_a = placeholder.textContent) != null ? _a : "";
+    const previous = this.fileStates.get(placeholder);
+    const original = previous && current === previous.written ? previous.original : current;
+    const options = this.options.fileNames;
+    if (!options) {
+      if (previous && current === previous.written) {
+        placeholder.textContent = previous.original;
+      }
+      this.fileStates.delete(placeholder);
+      return;
+    }
+    if (original.trim().length === 0) {
+      this.fileStates.delete(placeholder);
+      return;
+    }
+    const display = displayFileName(original, options);
+    if (current !== display) placeholder.textContent = display;
+    this.fileStates.set(placeholder, { original, written: display });
+  }
+  /** Gives every rewritten file name its original text back. */
+  restoreFileNames() {
+    var _a;
+    for (const leaf of this.app.workspace.getLeavesOfType("canvas")) {
+      const canvas = findCanvas(leaf.view);
+      if (!(canvas == null ? void 0 : canvas.nodes)) continue;
+      for (const node of canvas.nodes.values()) {
+        const placeholder = node.placeholderEl;
+        if (!(placeholder instanceof HTMLElement)) continue;
+        const state = this.fileStates.get(placeholder);
+        if (!state) continue;
+        if (((_a = placeholder.textContent) != null ? _a : "") === state.written) {
+          placeholder.textContent = state.original;
+        }
+        this.fileStates.delete(placeholder);
+      }
+    }
   }
 };
 
@@ -1242,6 +1394,9 @@ var DEFAULT_SETTINGS = {
   canvasPlaceholderBgMode: "keep",
   canvasPlaceholderBgOpacity: 10,
   canvasPlaceholderBgColor: "#f2f2f2",
+  canvasPlaceholderMaxWidth: 0,
+  canvasPlaceholderCountMode: "width",
+  canvasPlaceholderStripSuffixes: ".excalidraw.md, .excalidraw",
   canvasTextCardLabelEnabled: false,
   canvasTextCardLabelSize: 24,
   canvasTextCardLabelColorMode: "follow",
@@ -1307,6 +1462,7 @@ var NUMBER_RANGES = {
   kanbanScale: [0.3, 1.5],
   canvasPlaceholderSize: [6, 200],
   canvasPlaceholderBgOpacity: [0, 100],
+  canvasPlaceholderMaxWidth: [0, 40],
   canvasTextCardLabelSize: [6, 200],
   canvasTextCardLabelMaxChars: [0, 40]
 };
@@ -1349,6 +1505,9 @@ function normalizeSettings(stored) {
   }
   if (!PLACEHOLDER_BG_MODES.includes(out.canvasPlaceholderBgMode)) {
     out.canvasPlaceholderBgMode = DEFAULT_SETTINGS.canvasPlaceholderBgMode;
+  }
+  if (!COUNT_MODES.includes(out.canvasPlaceholderCountMode)) {
+    out.canvasPlaceholderCountMode = DEFAULT_SETTINGS.canvasPlaceholderCountMode;
   }
   if (!PLACEHOLDER_COLOR_MODES.includes(
     out.canvasTextCardLabelColorMode
@@ -2175,6 +2334,32 @@ function uiRows() {
     },
     { kind: "color", key: "canvasPlaceholderBgColor", name: "自定义背景色" },
     {
+      kind: "slider",
+      key: "canvasPlaceholderMaxWidth",
+      name: "文件名只显示前几个字",
+      desc: "0 = 不限制。单位是「半角字宽」：一个汉字或全角符号算 2、一个英文字母或数字算 1 —— 所以 10 表示 10 个字母或 5 个汉字。想改成按字符个数数，看下面「字数怎么算」。",
+      min: 0,
+      max: 40,
+      step: 1
+    },
+    {
+      kind: "dropdown",
+      key: "canvasPlaceholderCountMode",
+      name: "字数怎么算",
+      desc: "默认按显示宽度，中英文混排截断后看起来才等长；选「每个字都算 1」则中英文一视同仁。",
+      options: [
+        { value: "width", label: "按显示宽度（中文算 2）" },
+        { value: "chars", label: "每个字都算 1" }
+      ]
+    },
+    {
+      kind: "text",
+      key: "canvasPlaceholderStripSuffixes",
+      name: "隐藏这些后缀",
+      desc: "逗号或空格分隔，不区分大小写，只从末尾去掉，可连续去多个。默认已隐藏 .excalidraw.md 与 .excalidraw —— 图纸缩小时显示「图」而不是「图.excalidraw」。清空这一栏则原名不动。",
+      placeholder: ".excalidraw.md, .excalidraw"
+    },
+    {
       kind: "toggle",
       key: "canvasTextCardLabelEnabled",
       name: "文本卡片显示首行文字",
@@ -2383,11 +2568,20 @@ var StyleToolkitPlugin = class extends import_obsidian3.Plugin {
    */
   syncCardLabels() {
     if (!this.cardLabeler) return;
-    if (this.settings.canvasTextCardLabelEnabled) {
-      this.cardLabeler.start(this.settings.canvasTextCardLabelMaxChars);
-    } else {
+    const textCards = this.settings.canvasTextCardLabelEnabled ? { maxChars: this.settings.canvasTextCardLabelMaxChars } : null;
+    const suffixes = parseSuffixList(
+      this.settings.canvasPlaceholderStripSuffixes
+    );
+    const fileNames = suffixes.length > 0 || this.settings.canvasPlaceholderMaxWidth > 0 ? {
+      maxWidth: this.settings.canvasPlaceholderMaxWidth,
+      countMode: this.settings.canvasPlaceholderCountMode,
+      suffixes
+    } : null;
+    if (!textCards && !fileNames) {
       this.cardLabeler.stop();
+      return;
     }
+    this.cardLabeler.start({ textCards, fileNames });
   }
   /**
    * Called by every settings row: repaint immediately, persist shortly after.

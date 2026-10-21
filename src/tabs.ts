@@ -823,6 +823,40 @@ function uiRows(): Row[] {
 			step: 1,
 		},
 		{ kind: "color", key: "canvasPlaceholderBgColor", name: "自定义背景色" },
+		{
+			kind: "slider",
+			key: "canvasPlaceholderMaxWidth",
+			name: "文件名只显示前几个字",
+			desc:
+				"0 = 不限制。单位是「半角字宽」：一个汉字或全角符号算 2、" +
+				"一个英文字母或数字算 1 —— 所以 10 表示 10 个字母或 5 个汉字。" +
+				"想改成按字符个数数，看下面「字数怎么算」。",
+			min: 0,
+			max: 40,
+			step: 1,
+		},
+		{
+			kind: "dropdown",
+			key: "canvasPlaceholderCountMode",
+			name: "字数怎么算",
+			desc:
+				"默认按显示宽度，中英文混排截断后看起来才等长；" +
+				"选「每个字都算 1」则中英文一视同仁。",
+			options: [
+				{ value: "width", label: "按显示宽度（中文算 2）" },
+				{ value: "chars", label: "每个字都算 1" },
+			],
+		},
+		{
+			kind: "text",
+			key: "canvasPlaceholderStripSuffixes",
+			name: "隐藏这些后缀",
+			desc:
+				"逗号或空格分隔，不区分大小写，只从末尾去掉，可连续去多个。" +
+				"默认已隐藏 .excalidraw.md 与 .excalidraw —— 图纸缩小时显示「图」" +
+				"而不是「图.excalidraw」。清空这一栏则原名不动。",
+			placeholder: ".excalidraw.md, .excalidraw",
+		},
 
 		{
 			kind: "toggle",

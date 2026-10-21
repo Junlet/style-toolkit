@@ -11,6 +11,8 @@
  * back to a stock look than switching off a dozen individual rows.
  */
 
+import { COUNT_MODES } from "./filenames";
+
 /** The plugin's persisted settings. */
 export interface StyleToolkitSettings {
 	/** Which settings shape this data was written with. */
@@ -195,6 +197,26 @@ export interface StyleToolkitSettings {
 	canvasPlaceholderBgMode: string;
 	canvasPlaceholderBgOpacity: number;
 	canvasPlaceholderBgColor: string;
+
+	/**
+	 * How much of a thumbnail file name is shown.
+	 *
+	 * A budget, not a character count: by default one CJK character costs 2 and
+	 * one Latin character costs 1, so a value of 10 means ten Latin letters or
+	 * five Chinese characters. `0` leaves the name whole. Set
+	 * {@link canvasPlaceholderCountMode} to `chars` to count code points instead.
+	 */
+	canvasPlaceholderMaxWidth: number;
+	/** `width` (CJK counts 2) | `chars` (every code point counts 1). */
+	canvasPlaceholderCountMode: string;
+	/**
+	 * Suffixes hidden from the thumbnail file name, comma or space separated.
+	 *
+	 * Case-insensitive, trailing only, applied repeatedly. Defaults to the
+	 * drawing extension: Obsidian's short name for `图.excalidraw.md` is
+	 * `图.excalidraw`, and that suffix is just noise on a thumbnail.
+	 */
+	canvasPlaceholderStripSuffixes: string;
 
 	/**
 	 * First-line label on minimised Canvas **text cards**.
@@ -430,6 +452,10 @@ export const DEFAULT_SETTINGS: StyleToolkitSettings = {
 	canvasPlaceholderBgOpacity: 10,
 	canvasPlaceholderBgColor: "#f2f2f2",
 
+	canvasPlaceholderMaxWidth: 0,
+	canvasPlaceholderCountMode: "width",
+	canvasPlaceholderStripSuffixes: ".excalidraw.md, .excalidraw",
+
 	canvasTextCardLabelEnabled: false,
 	canvasTextCardLabelSize: 24,
 	canvasTextCardLabelColorMode: "follow",
@@ -575,6 +601,7 @@ const NUMBER_RANGES: Record<string, [number, number]> = {
 	kanbanScale: [0.3, 1.5],
 	canvasPlaceholderSize: [6, 200],
 	canvasPlaceholderBgOpacity: [0, 100],
+	canvasPlaceholderMaxWidth: [0, 40],
 	canvasTextCardLabelSize: [6, 200],
 	canvasTextCardLabelMaxChars: [0, 40],
 };
@@ -651,6 +678,10 @@ export function normalizeSettings(
 	}
 	if (!PLACEHOLDER_BG_MODES.includes(out.canvasPlaceholderBgMode as string)) {
 		out.canvasPlaceholderBgMode = DEFAULT_SETTINGS.canvasPlaceholderBgMode;
+	}
+	if (!COUNT_MODES.includes(out.canvasPlaceholderCountMode as string)) {
+		out.canvasPlaceholderCountMode =
+			DEFAULT_SETTINGS.canvasPlaceholderCountMode;
 	}
 	if (
 		!PLACEHOLDER_COLOR_MODES.includes(
