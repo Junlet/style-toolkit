@@ -1,7 +1,7 @@
 {
   "id": "style-toolkit",
   "name": "Style Toolkit",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "minAppVersion": "1.8.7",
   "description": "把一组 CSS 片段整合成可逐项开关与调节的设置：文字灰度层级、标题颜色与虚线、列表竖线与符号、Callout、代码块配色、界面微调。",
   "author": "Junlet",

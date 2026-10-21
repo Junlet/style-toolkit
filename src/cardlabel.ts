@@ -61,6 +61,30 @@ interface CanvasLike {
 }
 
 /**
+ * Cuts a label down to `maxChars` characters.
+ *
+ * Counts by **code point**, not UTF-16 unit, so an emoji or any other astral
+ * character is dropped whole instead of being split into two broken halves.
+ * (`Array.from` on a string iterates code points.) Combining marks and emoji
+ * ZWJ sequences can still be separated -- that needs `Intl.Segmenter`, which is
+ * not worth it for a canvas thumbnail label.
+ *
+ * No ellipsis is appended: the label sits in a box that already clips
+ * (`overflow: hidden`), so a trailing "…" would only steal one of the
+ * characters the user explicitly asked for.
+ *
+ * @param text - The already-extracted first line.
+ * @param maxChars - Character limit; `0` or negative means "no limit".
+ * @returns The text, shortened if a positive limit was given.
+ */
+function clip(text: string, maxChars: number): string {
+	if (!(maxChars > 0)) return text;
+	const characters = Array.from(text);
+	if (characters.length <= maxChars) return text;
+	return characters.slice(0, maxChars).join("");
+}
+
+/**
  * Extracts the label text from a card's Markdown source.
  *
  * The first line that has anything on it wins, so a card that starts with a
@@ -68,18 +92,15 @@ interface CanvasLike {
  * `# 项目计划` should read `项目计划`, since the `#` is syntax rather than
  * content -- while everything else is left exactly as typed.
  *
- * No length limit is applied here: the placeholder already clips to its box
- * (`overflow: hidden`, `overflow-wrap: anywhere`), so a long line naturally
- * shows only as much as fits at the configured size.
- *
  * @param raw - The card's Markdown source.
+ * @param maxChars - Optional character limit; `0` means "the whole first line".
  * @returns The label text, or `""` when the card has no text at all.
  */
-export function firstLineOf(raw: string): string {
+export function firstLineOf(raw: string, maxChars = 0): string {
 	for (const line of raw.split("\n")) {
 		const collapsed = line.replace(/\s+/gu, " ").trim();
 		const withoutMarker = collapsed.replace(/^#{1,6}[ \t]+/u, "").trim();
-		if (withoutMarker.length > 0) return withoutMarker;
+		if (withoutMarker.length > 0) return clip(withoutMarker, maxChars);
 	}
 	return "";
 }
@@ -88,9 +109,10 @@ export function firstLineOf(raw: string): string {
  * Reads a node's label text, but only if it is a text card.
  *
  * @param node - Candidate Canvas node.
+ * @param maxChars - Optional character limit; `0` means "the whole first line".
  * @returns The first line of the card, or `""` for any other node type.
  */
-export function textCardLabel(node: CanvasNodeLike): string {
+export function textCardLabel(node: CanvasNodeLike, maxChars = 0): string {
 	let type: unknown;
 	let text: unknown;
 	let typeKnown = false;
@@ -111,7 +133,9 @@ export function textCardLabel(node: CanvasNodeLike): string {
 		return "";
 	}
 	const source = typeof text === "string" ? text : node.text;
-	return typeof source === "string" ? firstLineOf(source) : "";
+	return typeof source === "string"
+		? firstLineOf(source, maxChars)
+		: "";
 }
 
 /**
@@ -162,14 +186,26 @@ export class CardLabeler {
 	/** Logged once, so a failed lookup does not spam the console. */
 	private warned = false;
 
+	/**
+	 * Character limit for the label text; `0` means "the whole first line".
+	 *
+	 * Kept on the instance because the debounced observer callback has no access
+	 * to the plugin's settings, and a scan without the current limit would put
+	 * the untruncated text back.
+	 */
+	private maxChars = 0;
+
 	constructor(private readonly app: App) {}
 
 	/**
 	 * Turns the feature on: attaches any missing labels and starts watching.
 	 *
 	 * Idempotent, so a settings slider can call it on every step.
+	 *
+	 * @param maxChars - Character limit for the label text; `0` = no limit.
 	 */
-	start(): void {
+	start(maxChars = 0): void {
+		this.maxChars = maxChars;
 		if (!this.observer) {
 			this.observer = new MutationObserver(() => this.schedule());
 			this.observer.observe(document.body, {
@@ -253,7 +289,7 @@ export class CardLabeler {
 		const placeholder = node.placeholderEl;
 		if (!(placeholder instanceof HTMLElement)) return;
 
-		const text = textCardLabel(node);
+		const text = textCardLabel(node, this.maxChars);
 		const existing = placeholder.querySelector(
 			`:scope > .${LABEL_CLASS}`
 		) as HTMLElement | null;

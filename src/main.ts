@@ -146,7 +146,7 @@ export default class StyleToolkitPlugin extends Plugin implements SettingHost {
 	private syncCardLabels(): void {
 		if (!this.cardLabeler) return;
 		if (this.settings.canvasTextCardLabelEnabled) {
-			this.cardLabeler.start();
+			this.cardLabeler.start(this.settings.canvasTextCardLabelMaxChars);
 		} else {
 			this.cardLabeler.stop();
 		}

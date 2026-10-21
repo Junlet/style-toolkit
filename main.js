@@ -29,15 +29,21 @@ var import_obsidian3 = require("obsidian");
 var LABEL_CLASS = "stk-card-label";
 var LABEL_STATE_CLASS = "stk-has-card-label";
 var SCAN_DEBOUNCE_MS = 120;
-function firstLineOf(raw) {
+function clip(text, maxChars) {
+  if (!(maxChars > 0)) return text;
+  const characters = Array.from(text);
+  if (characters.length <= maxChars) return text;
+  return characters.slice(0, maxChars).join("");
+}
+function firstLineOf(raw, maxChars = 0) {
   for (const line of raw.split("\n")) {
     const collapsed = line.replace(/\s+/gu, " ").trim();
     const withoutMarker = collapsed.replace(/^#{1,6}[ \t]+/u, "").trim();
-    if (withoutMarker.length > 0) return withoutMarker;
+    if (withoutMarker.length > 0) return clip(withoutMarker, maxChars);
   }
   return "";
 }
-function textCardLabel(node) {
+function textCardLabel(node, maxChars = 0) {
   let type;
   let text;
   let typeKnown = false;
@@ -56,7 +62,7 @@ function textCardLabel(node) {
     return "";
   }
   const source = typeof text === "string" ? text : node.text;
-  return typeof source === "string" ? firstLineOf(source) : "";
+  return typeof source === "string" ? firstLineOf(source, maxChars) : "";
 }
 function isCanvasLike(value) {
   if (!value || typeof value !== "object") return false;
@@ -80,13 +86,24 @@ var CardLabeler = class {
     this.scanTimer = null;
     /** Logged once, so a failed lookup does not spam the console. */
     this.warned = false;
+    /**
+     * Character limit for the label text; `0` means "the whole first line".
+     *
+     * Kept on the instance because the debounced observer callback has no access
+     * to the plugin's settings, and a scan without the current limit would put
+     * the untruncated text back.
+     */
+    this.maxChars = 0;
   }
   /**
    * Turns the feature on: attaches any missing labels and starts watching.
    *
    * Idempotent, so a settings slider can call it on every step.
+   *
+   * @param maxChars - Character limit for the label text; `0` = no limit.
    */
-  start() {
+  start(maxChars = 0) {
+    this.maxChars = maxChars;
     if (!this.observer) {
       this.observer = new MutationObserver(() => this.schedule());
       this.observer.observe(document.body, {
@@ -163,7 +180,7 @@ var CardLabeler = class {
   applyTo(node) {
     const placeholder = node.placeholderEl;
     if (!(placeholder instanceof HTMLElement)) return;
-    const text = textCardLabel(node);
+    const text = textCardLabel(node, this.maxChars);
     const existing = placeholder.querySelector(
       `:scope > .${LABEL_CLASS}`
     );
@@ -1229,6 +1246,7 @@ var DEFAULT_SETTINGS = {
   canvasTextCardLabelSize: 24,
   canvasTextCardLabelColorMode: "follow",
   canvasTextCardLabelColor: "#c0c0c0",
+  canvasTextCardLabelMaxChars: 0,
   kanbanScaleEnabled: true,
   kanbanScale: 0.8
 };
@@ -1289,7 +1307,8 @@ var NUMBER_RANGES = {
   kanbanScale: [0.3, 1.5],
   canvasPlaceholderSize: [6, 200],
   canvasPlaceholderBgOpacity: [0, 100],
-  canvasTextCardLabelSize: [6, 200]
+  canvasTextCardLabelSize: [6, 200],
+  canvasTextCardLabelMaxChars: [0, 40]
 };
 var PLACEHOLDER_COLOR_MODES = ["follow", "custom", "inherit"];
 var PLACEHOLDER_BG_MODES = ["keep", "follow", "custom"];
@@ -2159,7 +2178,7 @@ function uiRows() {
       kind: "toggle",
       key: "canvasTextCardLabelEnabled",
       name: "文本卡片显示首行文字",
-      desc: "文本卡片不是文件，缩小时 Obsidian 只画一个图标、没有文件名那行字。打开后改为显示卡片的第一行文字（行首的 # 标题标记会去掉）。放不下的部分会被裁掉，所以长行显示出来就是前几个字。"
+      desc: "文本卡片不是文件，缩小时 Obsidian 只画一个图标、没有文件名那行字。打开后改为显示卡片的第一行文字（行首的 # 标题标记会去掉）。要用几个字以内，看下面的「首行只显示前几个字」。"
     },
     {
       kind: "slider",
@@ -2168,6 +2187,15 @@ function uiRows() {
       desc: "与上面那一项「字号」互相独立：文件卡片用文件名的大小，文本卡片用这一项。",
       min: 6,
       max: 200,
+      step: 1
+    },
+    {
+      kind: "slider",
+      key: "canvasTextCardLabelMaxChars",
+      name: "首行只显示前几个字",
+      desc: "拖到 0 表示不限制，整行都显示（放不下的部分仍会被裁掉）；大于 0 时按字数把文字截断，与这张卡片有多宽无关。",
+      min: 0,
+      max: 40,
       step: 1
     },
     {
@@ -2356,7 +2384,7 @@ var StyleToolkitPlugin = class extends import_obsidian3.Plugin {
   syncCardLabels() {
     if (!this.cardLabeler) return;
     if (this.settings.canvasTextCardLabelEnabled) {
-      this.cardLabeler.start();
+      this.cardLabeler.start(this.settings.canvasTextCardLabelMaxChars);
     } else {
       this.cardLabeler.stop();
     }

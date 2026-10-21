@@ -211,6 +211,15 @@ export interface StyleToolkitSettings {
 	/** `follow` | `custom` | `inherit` */
 	canvasTextCardLabelColorMode: string;
 	canvasTextCardLabelColor: string;
+	/**
+	 * How many characters of the first line are shown.
+	 *
+	 * `0` shows the whole line and lets the placeholder's own `overflow: hidden`
+	 * decide what fits -- the behaviour when this setting did not exist. A
+	 * positive value trims the text itself, which is the only way to guarantee a
+	 * given number of characters regardless of the card's width.
+	 */
+	canvasTextCardLabelMaxChars: number;
 
 	kanbanScaleEnabled: boolean;
 	kanbanScale: number;
@@ -425,6 +434,7 @@ export const DEFAULT_SETTINGS: StyleToolkitSettings = {
 	canvasTextCardLabelSize: 24,
 	canvasTextCardLabelColorMode: "follow",
 	canvasTextCardLabelColor: "#c0c0c0",
+	canvasTextCardLabelMaxChars: 0,
 
 	kanbanScaleEnabled: true,
 	kanbanScale: 0.8,
@@ -566,6 +576,7 @@ const NUMBER_RANGES: Record<string, [number, number]> = {
 	canvasPlaceholderSize: [6, 200],
 	canvasPlaceholderBgOpacity: [0, 100],
 	canvasTextCardLabelSize: [6, 200],
+	canvasTextCardLabelMaxChars: [0, 40],
 };
 
 /** Allowed values for the placeholder text colour mode. */
