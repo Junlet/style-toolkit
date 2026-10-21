@@ -25,6 +25,160 @@ __export(main_exports, {
 module.exports = __toCommonJS(main_exports);
 var import_obsidian3 = require("obsidian");
 
+// src/cardlabel.ts
+var LABEL_CLASS = "stk-card-label";
+var LABEL_STATE_CLASS = "stk-has-card-label";
+var SCAN_DEBOUNCE_MS = 120;
+function firstLineOf(raw) {
+  for (const line of raw.split("\n")) {
+    const collapsed = line.replace(/\s+/gu, " ").trim();
+    const withoutMarker = collapsed.replace(/^#{1,6}[ \t]+/u, "").trim();
+    if (withoutMarker.length > 0) return withoutMarker;
+  }
+  return "";
+}
+function textCardLabel(node) {
+  let type;
+  let text;
+  let typeKnown = false;
+  if (typeof node.getData === "function") {
+    try {
+      const data = node.getData();
+      type = data == null ? void 0 : data.type;
+      text = data == null ? void 0 : data.text;
+      typeKnown = true;
+    } catch (e) {
+    }
+  }
+  if (typeKnown) {
+    if (type !== "text") return "";
+  } else if (typeof node.text !== "string") {
+    return "";
+  }
+  const source = typeof text === "string" ? text : node.text;
+  return typeof source === "string" ? firstLineOf(source) : "";
+}
+function isCanvasLike(value) {
+  if (!value || typeof value !== "object") return false;
+  return value.nodes instanceof Map;
+}
+function findCanvas(view) {
+  if (!view || typeof view !== "object") return null;
+  const direct = view.canvas;
+  if (isCanvasLike(direct)) return direct;
+  for (const value of Object.values(view)) {
+    if (isCanvasLike(value)) return value;
+  }
+  return null;
+}
+var CardLabeler = class {
+  constructor(app) {
+    this.app = app;
+    /** Guards against two observers after a settings change. */
+    this.observer = null;
+    /** Pending debounced scan. */
+    this.scanTimer = null;
+    /** Logged once, so a failed lookup does not spam the console. */
+    this.warned = false;
+  }
+  /**
+   * Turns the feature on: attaches any missing labels and starts watching.
+   *
+   * Idempotent, so a settings slider can call it on every step.
+   */
+  start() {
+    if (!this.observer) {
+      this.observer = new MutationObserver(() => this.schedule());
+      this.observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
+    this.refresh();
+  }
+  /**
+   * Turns the feature off: removes every label and the icon-hiding class.
+   *
+   * The observer is disconnected too, so a disabled feature costs nothing.
+   */
+  stop() {
+    var _a;
+    (_a = this.observer) == null ? void 0 : _a.disconnect();
+    this.observer = null;
+    this.clearTimer();
+    for (const label of Array.from(
+      document.querySelectorAll(`.${LABEL_CLASS}`)
+    )) {
+      const placeholder = label.parentElement;
+      placeholder == null ? void 0 : placeholder.classList.remove(LABEL_STATE_CLASS);
+      label.remove();
+    }
+  }
+  /** Releases everything; called from the plugin's unload hook. */
+  destroy() {
+    this.stop();
+  }
+  /** Queues one scan, coalescing the mutations Obsidian generates in bursts. */
+  schedule() {
+    this.clearTimer();
+    this.scanTimer = window.setTimeout(() => {
+      this.scanTimer = null;
+      this.refresh();
+    }, SCAN_DEBOUNCE_MS);
+  }
+  /** Cancels a pending scan. */
+  clearTimer() {
+    if (this.scanTimer === null) return;
+    window.clearTimeout(this.scanTimer);
+    this.scanTimer = null;
+  }
+  /** Walks every open drawing and reconciles its labels. */
+  refresh() {
+    const leaves = this.app.workspace.getLeavesOfType("canvas");
+    let found = false;
+    for (const leaf of leaves) {
+      const canvas = findCanvas(leaf.view);
+      if (!(canvas == null ? void 0 : canvas.nodes)) continue;
+      found = true;
+      for (const node of canvas.nodes.values()) {
+        this.applyTo(node);
+      }
+    }
+    if (!found && leaves.length > 0 && !this.warned) {
+      this.warned = true;
+      console.warn(
+        "[style-toolkit] 无法读取 Canvas 节点，文本卡片标签未生效。可能是 Obsidian 内部结构变化，请反馈。"
+      );
+    }
+  }
+  /**
+   * Reconciles one node's label.
+   *
+   * Writing into a *detached* placeholder is fine and deliberate: Obsidian
+   * re-attaches the same element when the node shrinks again, so the label is
+   * already in place by then and no flicker is possible.
+   *
+   * @param node - The Canvas node to update.
+   */
+  applyTo(node) {
+    const placeholder = node.placeholderEl;
+    if (!(placeholder instanceof HTMLElement)) return;
+    const text = textCardLabel(node);
+    const existing = placeholder.querySelector(
+      `:scope > .${LABEL_CLASS}`
+    );
+    if (text.length === 0) {
+      existing == null ? void 0 : existing.remove();
+      placeholder.classList.remove(LABEL_STATE_CLASS);
+      return;
+    }
+    const label = existing != null ? existing : createDiv({ cls: LABEL_CLASS });
+    if (!existing) placeholder.appendChild(label);
+    if (label.textContent !== text) label.textContent = text;
+    placeholder.classList.add(LABEL_STATE_CLASS);
+  }
+};
+
 // src/listroot.ts
 var LIST_ROOT_CLASS = "style-toolkit-ul-root";
 var LIST_MARKER = /^([ \t]*)([-*+]|\d+[.)])([ \t]+|$)/;
@@ -772,6 +926,33 @@ function uiSection(s) {
       );
     }
   }
+  if (s.canvasTextCardLabelEnabled) {
+    parts.push(
+      rule(
+        ".canvas-node-placeholder.stk-has-card-label > .canvas-icon-placeholder",
+        { display: "none" }
+      )
+    );
+    const label = {
+      "font-size": px(s.canvasTextCardLabelSize),
+      // The placeholder centres its child. Clamping keeps a long first line
+      // from wrapping into a block that would then be clipped at both ends
+      // by the placeholder's own `overflow: hidden`.
+      display: "-webkit-box",
+      "-webkit-box-orient": "vertical",
+      "-webkit-box-align": "center",
+      "-webkit-line-clamp": "3",
+      overflow: "hidden",
+      "line-height": "1.2",
+      "max-width": "100%"
+    };
+    if (s.canvasTextCardLabelColorMode === "follow") {
+      label.color = "var(--canvas-color)";
+    } else if (s.canvasTextCardLabelColorMode === "custom") {
+      label.color = s.canvasTextCardLabelColor;
+    }
+    parts.push(rule(".stk-card-label", label));
+  }
   if (s.kanbanScaleEnabled) {
     parts.push(
       rule(".kanban-plugin", {
@@ -1044,6 +1225,10 @@ var DEFAULT_SETTINGS = {
   canvasPlaceholderBgMode: "keep",
   canvasPlaceholderBgOpacity: 10,
   canvasPlaceholderBgColor: "#f2f2f2",
+  canvasTextCardLabelEnabled: false,
+  canvasTextCardLabelSize: 24,
+  canvasTextCardLabelColorMode: "follow",
+  canvasTextCardLabelColor: "#c0c0c0",
   kanbanScaleEnabled: true,
   kanbanScale: 0.8
 };
@@ -1103,7 +1288,8 @@ var NUMBER_RANGES = {
   blockIdHoverOpacity: [0, 1],
   kanbanScale: [0.3, 1.5],
   canvasPlaceholderSize: [6, 200],
-  canvasPlaceholderBgOpacity: [0, 100]
+  canvasPlaceholderBgOpacity: [0, 100],
+  canvasTextCardLabelSize: [6, 200]
 };
 var PLACEHOLDER_COLOR_MODES = ["follow", "custom", "inherit"];
 var PLACEHOLDER_BG_MODES = ["keep", "follow", "custom"];
@@ -1144,6 +1330,11 @@ function normalizeSettings(stored) {
   }
   if (!PLACEHOLDER_BG_MODES.includes(out.canvasPlaceholderBgMode)) {
     out.canvasPlaceholderBgMode = DEFAULT_SETTINGS.canvasPlaceholderBgMode;
+  }
+  if (!PLACEHOLDER_COLOR_MODES.includes(
+    out.canvasTextCardLabelColorMode
+  )) {
+    out.canvasTextCardLabelColorMode = DEFAULT_SETTINGS.canvasTextCardLabelColorMode;
   }
   if (out.listSizeBase < out.listSizeMin) {
     out.listSizeMin = out.listSizeBase;
@@ -1964,6 +2155,37 @@ function uiRows() {
       step: 1
     },
     { kind: "color", key: "canvasPlaceholderBgColor", name: "自定义背景色" },
+    {
+      kind: "toggle",
+      key: "canvasTextCardLabelEnabled",
+      name: "文本卡片显示首行文字",
+      desc: "文本卡片不是文件，缩小时 Obsidian 只画一个图标、没有文件名那行字。打开后改为显示卡片的第一行文字（行首的 # 标题标记会去掉）。放不下的部分会被裁掉，所以长行显示出来就是前几个字。"
+    },
+    {
+      kind: "slider",
+      key: "canvasTextCardLabelSize",
+      name: "文本卡片字号（px）",
+      desc: "与上面那一项「字号」互相独立：文件卡片用文件名的大小，文本卡片用这一项。",
+      min: 6,
+      max: 200,
+      step: 1
+    },
+    {
+      kind: "dropdown",
+      key: "canvasTextCardLabelColorMode",
+      name: "文本卡片文字颜色",
+      desc: "「跟随卡片颜色」读的是节点上的 --canvas-color，所以预设色和自定义色都能跟上。",
+      options: [
+        { value: "follow", label: "跟随卡片颜色" },
+        { value: "custom", label: "自定义颜色" },
+        { value: "inherit", label: "保持默认（不改）" }
+      ]
+    },
+    {
+      kind: "color",
+      key: "canvasTextCardLabelColor",
+      name: "文本卡片自定义颜色"
+    },
     { kind: "heading", name: "Kanban" },
     {
       kind: "toggle",
@@ -2062,6 +2284,14 @@ var StyleToolkitPlugin = class extends import_obsidian3.Plugin {
     /** Registered tabs, so a reset can put the controls back to their defaults. */
     this.tabs = [];
     /**
+     * Writes first-line labels into shrink-to-a-icon Canvas text cards.
+     *
+     * Not a stylesheet concern: Obsidian's placeholder for a text card carries
+     * only an icon, so the text has to be put there from code. Created on load,
+     * started only while its setting is on.
+     */
+    this.cardLabeler = null;
+    /**
      * Whether the Live Preview line decorations could be installed.
      *
      * The stylesheet has to know: with them the list rule keys off a class the
@@ -2085,6 +2315,15 @@ var StyleToolkitPlugin = class extends import_obsidian3.Plugin {
     this.styleEl.id = STYLE_EL_ID;
     document.head.appendChild(this.styleEl);
     this.applyStyles();
+    this.cardLabeler = new CardLabeler(this.app);
+    this.register(() => {
+      var _a;
+      return (_a = this.cardLabeler) == null ? void 0 : _a.destroy();
+    });
+    this.registerEvent(
+      this.app.workspace.on("layout-change", () => this.syncCardLabels())
+    );
+    this.syncCardLabels();
     for (const Tab of ALL_TABS) {
       const tab = new Tab(this.app, this);
       this.tabs.push(tab);
@@ -2108,6 +2347,21 @@ var StyleToolkitPlugin = class extends import_obsidian3.Plugin {
     this.styleEl.textContent = buildCss(this.settings, this.buildOptions);
   }
   /**
+   * Matches the Canvas text-card labeller to the current setting.
+   *
+   * Called on load, on every settings change and on layout changes, so
+   * flipping the toggle adds or removes the labels immediately instead of
+   * waiting for the next drawing to be opened.
+   */
+  syncCardLabels() {
+    if (!this.cardLabeler) return;
+    if (this.settings.canvasTextCardLabelEnabled) {
+      this.cardLabeler.start();
+    } else {
+      this.cardLabeler.stop();
+    }
+  }
+  /**
    * Called by every settings row: repaint immediately, persist shortly after.
    *
    * The repaint is synchronous so dragging a slider updates the document live;
@@ -2115,6 +2369,7 @@ var StyleToolkitPlugin = class extends import_obsidian3.Plugin {
    */
   touch() {
     this.applyStyles();
+    this.syncCardLabels();
     if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
     this.saveTimer = window.setTimeout(() => {
       this.saveTimer = null;
@@ -2136,6 +2391,7 @@ var StyleToolkitPlugin = class extends import_obsidian3.Plugin {
   async resetAll() {
     this.settings = normalizeSettings(null);
     this.applyStyles();
+    this.syncCardLabels();
     await this.saveSettings();
     for (const tab of this.tabs) {
       tab.display();

@@ -196,6 +196,22 @@ export interface StyleToolkitSettings {
 	canvasPlaceholderBgOpacity: number;
 	canvasPlaceholderBgColor: string;
 
+	/**
+	 * First-line label on minimised Canvas **text cards**.
+	 *
+	 * A text card is not backed by a file, so Obsidian's placeholder shows only
+	 * an align-left icon. Turning this on shows the card's first line there
+	 * instead -- the closest thing a text card has to a file name.
+	 *
+	 * Off by default: unlike the rest of this tab, this is an addition to
+	 * Obsidian's own look rather than a rewrite of an existing snippet.
+	 */
+	canvasTextCardLabelEnabled: boolean;
+	canvasTextCardLabelSize: number;
+	/** `follow` | `custom` | `inherit` */
+	canvasTextCardLabelColorMode: string;
+	canvasTextCardLabelColor: string;
+
 	kanbanScaleEnabled: boolean;
 	kanbanScale: number;
 }
@@ -405,6 +421,11 @@ export const DEFAULT_SETTINGS: StyleToolkitSettings = {
 	canvasPlaceholderBgOpacity: 10,
 	canvasPlaceholderBgColor: "#f2f2f2",
 
+	canvasTextCardLabelEnabled: false,
+	canvasTextCardLabelSize: 24,
+	canvasTextCardLabelColorMode: "follow",
+	canvasTextCardLabelColor: "#c0c0c0",
+
 	kanbanScaleEnabled: true,
 	kanbanScale: 0.8,
 };
@@ -544,6 +565,7 @@ const NUMBER_RANGES: Record<string, [number, number]> = {
 	kanbanScale: [0.3, 1.5],
 	canvasPlaceholderSize: [6, 200],
 	canvasPlaceholderBgOpacity: [0, 100],
+	canvasTextCardLabelSize: [6, 200],
 };
 
 /** Allowed values for the placeholder text colour mode. */
@@ -618,6 +640,14 @@ export function normalizeSettings(
 	}
 	if (!PLACEHOLDER_BG_MODES.includes(out.canvasPlaceholderBgMode as string)) {
 		out.canvasPlaceholderBgMode = DEFAULT_SETTINGS.canvasPlaceholderBgMode;
+	}
+	if (
+		!PLACEHOLDER_COLOR_MODES.includes(
+			out.canvasTextCardLabelColorMode as string
+		)
+	) {
+		out.canvasTextCardLabelColorMode =
+			DEFAULT_SETTINGS.canvasTextCardLabelColorMode;
 	}
 
 	// The base size must stay above the floor, or every level clamps to the

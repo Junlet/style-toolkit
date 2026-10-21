@@ -21,6 +21,7 @@
  */
 
 import { Notice, Plugin } from "obsidian";
+import { CardLabeler } from "./cardlabel";
 import { buildCss, type BuildOptions } from "./css";
 import { createListRootExtension } from "./editor";
 import type { SettingHost } from "./rows";
@@ -58,6 +59,15 @@ export default class StyleToolkitPlugin extends Plugin implements SettingHost {
 	private readonly tabs: ToolkitTab[] = [];
 
 	/**
+	 * Writes first-line labels into shrink-to-a-icon Canvas text cards.
+	 *
+	 * Not a stylesheet concern: Obsidian's placeholder for a text card carries
+	 * only an icon, so the text has to be put there from code. Created on load,
+	 * started only while its setting is on.
+	 */
+	private cardLabeler: CardLabeler | null = null;
+
+	/**
 	 * Whether the Live Preview line decorations could be installed.
 	 *
 	 * The stylesheet has to know: with them the list rule keys off a class the
@@ -90,6 +100,16 @@ export default class StyleToolkitPlugin extends Plugin implements SettingHost {
 		document.head.appendChild(this.styleEl);
 		this.applyStyles();
 
+		this.cardLabeler = new CardLabeler(this.app);
+		this.register(() => this.cardLabeler?.destroy());
+		// Opening a canvas does not always produce a mutation inside the DOM this
+		// labeller watches, so the layout change is what reliably triggers the
+		// first scan for a freshly opened drawing.
+		this.registerEvent(
+			this.app.workspace.on("layout-change", () => this.syncCardLabels())
+		);
+		this.syncCardLabels();
+
 		for (const Tab of ALL_TABS) {
 			const tab = new Tab(this.app, this);
 			this.tabs.push(tab);
@@ -117,6 +137,22 @@ export default class StyleToolkitPlugin extends Plugin implements SettingHost {
 	}
 
 	/**
+	 * Matches the Canvas text-card labeller to the current setting.
+	 *
+	 * Called on load, on every settings change and on layout changes, so
+	 * flipping the toggle adds or removes the labels immediately instead of
+	 * waiting for the next drawing to be opened.
+	 */
+	private syncCardLabels(): void {
+		if (!this.cardLabeler) return;
+		if (this.settings.canvasTextCardLabelEnabled) {
+			this.cardLabeler.start();
+		} else {
+			this.cardLabeler.stop();
+		}
+	}
+
+	/**
 	 * Called by every settings row: repaint immediately, persist shortly after.
 	 *
 	 * The repaint is synchronous so dragging a slider updates the document live;
@@ -124,6 +160,7 @@ export default class StyleToolkitPlugin extends Plugin implements SettingHost {
 	 */
 	touch(): void {
 		this.applyStyles();
+		this.syncCardLabels();
 		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
 		this.saveTimer = window.setTimeout(() => {
 			this.saveTimer = null;
@@ -147,6 +184,7 @@ export default class StyleToolkitPlugin extends Plugin implements SettingHost {
 	async resetAll(): Promise<void> {
 		this.settings = normalizeSettings(null);
 		this.applyStyles();
+		this.syncCardLabels();
 		await this.saveSettings();
 		for (const tab of this.tabs) {
 			tab.display();

@@ -824,6 +824,45 @@ function uiRows(): Row[] {
 		},
 		{ kind: "color", key: "canvasPlaceholderBgColor", name: "自定义背景色" },
 
+		{
+			kind: "toggle",
+			key: "canvasTextCardLabelEnabled",
+			name: "文本卡片显示首行文字",
+			desc:
+				"文本卡片不是文件，缩小时 Obsidian 只画一个图标、没有文件名那行字。" +
+				"打开后改为显示卡片的第一行文字（行首的 # 标题标记会去掉）。" +
+				"放不下的部分会被裁掉，所以长行显示出来就是前几个字。",
+		},
+		{
+			kind: "slider",
+			key: "canvasTextCardLabelSize",
+			name: "文本卡片字号（px）",
+			desc:
+				"与上面那一项「字号」互相独立：文件卡片用文件名的大小，" +
+				"文本卡片用这一项。",
+			min: 6,
+			max: 200,
+			step: 1,
+		},
+		{
+			kind: "dropdown",
+			key: "canvasTextCardLabelColorMode",
+			name: "文本卡片文字颜色",
+			desc:
+				"「跟随卡片颜色」读的是节点上的 --canvas-color，" +
+				"所以预设色和自定义色都能跟上。",
+			options: [
+				{ value: "follow", label: "跟随卡片颜色" },
+				{ value: "custom", label: "自定义颜色" },
+				{ value: "inherit", label: "保持默认（不改）" },
+			],
+		},
+		{
+			kind: "color",
+			key: "canvasTextCardLabelColor",
+			name: "文本卡片自定义颜色",
+		},
+
 		{ kind: "heading", name: "Kanban" },
 		{
 			kind: "toggle",

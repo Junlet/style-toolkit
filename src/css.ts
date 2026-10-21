@@ -1135,6 +1135,43 @@ function uiSection(s: StyleToolkitSettings): string {
 		}
 	}
 
+	if (s.canvasTextCardLabelEnabled) {
+		// `cardlabel.ts` supplies the text; everything visual is here.
+		//
+		// A text card has no file name, so Obsidian's placeholder shows only its
+		// align-left icon. Once a label exists the icon would compete with the
+		// text for a very small box, so it is dropped -- but only on placeholders
+		// that actually got a label, which is what `stk-has-card-label` marks.
+		// Keying off that class rather than `:has()` also keeps the rule working
+		// on older Chromium builds.
+		parts.push(
+			rule(
+				".canvas-node-placeholder.stk-has-card-label > .canvas-icon-placeholder",
+				{ display: "none" }
+			)
+		);
+
+		const label: Decls = {
+			"font-size": px(s.canvasTextCardLabelSize),
+			// The placeholder centres its child. Clamping keeps a long first line
+			// from wrapping into a block that would then be clipped at both ends
+			// by the placeholder's own `overflow: hidden`.
+			display: "-webkit-box",
+			"-webkit-box-orient": "vertical",
+			"-webkit-box-align": "center",
+			"-webkit-line-clamp": "3",
+			overflow: "hidden",
+			"line-height": "1.2",
+			"max-width": "100%",
+		};
+		if (s.canvasTextCardLabelColorMode === "follow") {
+			label.color = "var(--canvas-color)";
+		} else if (s.canvasTextCardLabelColorMode === "custom") {
+			label.color = s.canvasTextCardLabelColor;
+		}
+		parts.push(rule(".stk-card-label", label));
+	}
+
 	if (s.kanbanScaleEnabled) {
 		// Scaling down leaves the original footprint filled by enlarging the
 		// box by the inverse, so the board still scrolls edge to edge.
