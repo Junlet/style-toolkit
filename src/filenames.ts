@@ -181,3 +181,157 @@ export function displayFileName(
 		options.countMode
 	);
 }
+
+// -- text-card labels ------------------------------------------------------
+
+/**
+ * Which Markdown syntax to strip from a text card's first line.
+ *
+ * A card holds Markdown, but the label sits where a file name would, so syntax
+ * that Markdown *renders* as formatting reads as garbage there: a card starting
+ * with a list item and bold text would be labelled `* **初代` instead of `初代`.
+ */
+export interface LabelFilters {
+	/** Heading, list, quote and task markers, plus emphasis/code runs. */
+	markdown: boolean;
+	/** Link and embed syntax, keeping the text that would have been visible. */
+	links: boolean;
+	/** `#tag` references. */
+	tags: boolean;
+}
+
+/** Everything needed to turn a card's source into label text. */
+export interface TextLabelOptions {
+	/** Budget; `0` means "no limit". */
+	maxChars: number;
+	/** `"width"` or `"chars"`; see {@link truncateText}. */
+	countMode: string;
+	/** Which syntax to strip; see {@link LabelFilters}. */
+	filters: LabelFilters;
+}
+
+/**
+ * Leading block markers: blockquote, heading, bullet, ordered list, task box.
+ *
+ * Applied repeatedly from the start, so a card written as `> - # 标题` loses the
+ * whole prefix rather than just the first marker.
+ */
+const BLOCK_MARKERS =
+	/^(?:>[ \t]*|#{1,6}[ \t]+|[-*+][ \t]+|\d+[.)][ \t]+|\[[ xX]\](?:[ \t]+|$))+/u;
+
+/**
+ * Removes Markdown emphasis, code, strikethrough and highlight runs.
+ *
+ * A run is dropped unless it sits **between two non-space characters**, which
+ * is how ordinary text uses those characters: `2*3` and `snake_case` keep their
+ * `*` and `_`, while `**初代**`, `~~删掉~~`, `==高亮==` and `` `code` `` lose
+ * their delimiters.
+ *
+ * @param text - A single line.
+ * @returns The line without marker runs.
+ */
+export function stripEmphasisRuns(text: string): string {
+	return text.replace(
+		/[*_~=`]+/gu,
+		(match: string, offset: number, whole: string) => {
+			const before = offset > 0 ? whole[offset - 1] : " ";
+			const after = whole[offset + match.length] ?? " ";
+			const insideWord = !/\s/u.test(before) && !/\s/u.test(after);
+			return insideWord ? match : "";
+		}
+	);
+}
+
+/**
+ * Removes leading block markers.
+ *
+ * @param text - A single line.
+ * @returns The line without its block prefix.
+ */
+export function stripBlockMarkers(text: string): string {
+	return text.replace(BLOCK_MARKERS, "").trim();
+}
+
+/**
+ * Removes link syntax, keeping the text a reader would have seen.
+ *
+ * - `[[笔记]]` → `笔记`, `[[笔记|别名]]` → `别名`, `[[笔记#标题]]` → `笔记`
+ * - `[文字](https://…)` → `文字`
+ * - `![[图片.png]]` and `![](url)` → removed: an embed's file name is noise in
+ *   a one-line label, and its alias (if any) is kept instead.
+ *
+ * @param text - A single line.
+ * @returns The line with link syntax resolved to plain text.
+ */
+export function stripLinkSyntax(text: string): string {
+	return (
+		text
+			.replace(
+				/!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/gu,
+				(_match, _target: string, alias?: string) => alias ?? ""
+			)
+			.replace(
+				/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/gu,
+				(_match, target: string, alias?: string) =>
+					alias ?? target.split("#")[0]
+			)
+			.replace(/!?\[([^\]]*)\]\([^)]*\)/gu, "$1")
+	);
+}
+
+/**
+ * Removes `#tag` references.
+ *
+ * Only a `#` that follows the start of the line or whitespace counts as a tag,
+ * so `C#` and `#1` mid-word survive.
+ *
+ * @param text - A single line.
+ * @returns The line without tags.
+ */
+export function stripTagSyntax(text: string): string {
+	return text.replace(/(^|\s)#[^\s#]+/gu, "$1");
+}
+
+/**
+ * Turns one source line into label text.
+ *
+ * Order matters: block markers go first so a bullet cannot confuse link
+ * parsing, then links (before emphasis, because a URL may contain `_` or `*`),
+ * then emphasis runs, then tags. Whitespace is collapsed again at the end
+ * because removing syntax leaves gaps behind.
+ *
+ * @param line - One line of the card's Markdown source.
+ * @param filters - Which syntax to strip.
+ * @returns The cleaned line, possibly empty.
+ */
+export function cleanLabelLine(line: string, filters: LabelFilters): string {
+	let text = line.replace(/\s+/gu, " ").trim();
+	if (text.length === 0) return "";
+	if (filters.markdown) text = stripBlockMarkers(text);
+	if (filters.links) text = stripLinkSyntax(text);
+	if (filters.markdown) text = stripEmphasisRuns(text);
+	if (filters.tags) text = stripTagSyntax(text);
+	return text.replace(/\s+/gu, " ").trim();
+}
+
+/**
+ * Picks the label text out of a text card's Markdown source.
+ *
+ * The first line that still has content **after** cleaning wins, so a card that
+ * opens with a blank line or with a line that was nothing but markers still
+ * gets a useful label instead of an empty one.
+ *
+ * @param raw - The card's Markdown source.
+ * @param options - Budget, counting rule and filters.
+ * @returns The label text, or `""` when nothing survives the filters.
+ */
+export function firstLineOf(raw: string, options: TextLabelOptions): string {
+	for (const line of raw.split("\n")) {
+		const cleaned = cleanLabelLine(line, options.filters);
+		if (cleaned.length > 0) {
+			return truncateText(cleaned, options.maxChars, options.countMode);
+		}
+	}
+	return "";
+}
+

@@ -891,6 +891,42 @@ function uiRows(): Row[] {
 		},
 		{
 			kind: "dropdown",
+			key: "canvasTextCardLabelCountMode",
+			name: "字数怎么算",
+			desc:
+				"和文件名那一项同一套规则：默认按显示宽度（汉字算 2、英文算 1），" +
+				"混排截断后看起来才等长；选「每个字都算 1」则中英文一视同仁。",
+			options: [
+				{ value: "width", label: "按显示宽度（中文算 2）" },
+				{ value: "chars", label: "每个字都算 1" },
+			],
+		},
+		{
+			kind: "toggle",
+			key: "canvasTextCardStripMarkdown",
+			name: "去掉 Markdown 标记",
+			desc:
+				"行首的标题 #、列表 -、引用 >、任务框，以及强调 * _、行内代码、" +
+				"删除线 ~~、高亮 ==。这样 `* **初代` 显示成「初代」。" +
+				"夹在字中间的 _ 和 * 不动（snake_case、2*3 保持原样）。",
+		},
+		{
+			kind: "toggle",
+			key: "canvasTextCardStripLinks",
+			name: "链接只留文字",
+			desc:
+				"[[笔记]] / [[笔记|别名]] 取笔记或别名，[文字](网址) 取文字；" +
+				"图片等嵌入（![[...]]）整段去掉 —— 文件名在缩略标签里只是噪音。",
+		},
+		{
+			kind: "toggle",
+			key: "canvasTextCardStripTags",
+			name: "去掉 #标签",
+			desc:
+				"只去掉行首或空格后面的 #标签，所以 C# 这类写法不受影响。",
+		},
+		{
+			kind: "dropdown",
 			key: "canvasTextCardLabelColorMode",
 			name: "文本卡片文字颜色",
 			desc:

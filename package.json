@@ -1,6 +1,6 @@
 {
   "name": "style-toolkit",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "Bundles a set of CSS snippets into toggleable, adjustable settings.",
   "main": "main.js",
   "scripts": {

@@ -148,7 +148,15 @@ export default class StyleToolkitPlugin extends Plugin implements SettingHost {
 		if (!this.cardLabeler) return;
 
 		const textCards = this.settings.canvasTextCardLabelEnabled
-			? { maxChars: this.settings.canvasTextCardLabelMaxChars }
+			? {
+					maxChars: this.settings.canvasTextCardLabelMaxChars,
+					countMode: this.settings.canvasTextCardLabelCountMode,
+					filters: {
+						markdown: this.settings.canvasTextCardStripMarkdown,
+						links: this.settings.canvasTextCardStripLinks,
+						tags: this.settings.canvasTextCardStripTags,
+					},
+				}
 			: null;
 
 		const suffixes = parseSuffixList(

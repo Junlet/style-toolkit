@@ -243,6 +243,28 @@ export interface StyleToolkitSettings {
 	 */
 	canvasTextCardLabelMaxChars: number;
 
+	/**
+	 * How a text-card label's length is counted.
+	 *
+	 * Same two rules as the file-name label: `width` charges 2 for a CJK
+	 * character and 1 for a Latin one, `chars` counts code points. Both default
+	 * to `width`, so the two kinds of label behave alike out of the box.
+	 */
+	canvasTextCardLabelCountMode: string;
+	/**
+	 * Strip the card's Markdown formatting out of the label.
+	 *
+	 * A card holds Markdown, but the label sits where a file name would, so the
+	 * syntax Markdown renders away reads as garbage there: a card opening with a
+	 * list item and bold text used to be labelled `* **初代`. With this on it
+	 * reads `初代`.
+	 */
+	canvasTextCardStripMarkdown: boolean;
+	/** Resolve links to the text a reader would have seen. */
+	canvasTextCardStripLinks: boolean;
+	/** Drop `#tag` references from the label. */
+	canvasTextCardStripTags: boolean;
+
 	kanbanScaleEnabled: boolean;
 	kanbanScale: number;
 }
@@ -461,6 +483,10 @@ export const DEFAULT_SETTINGS: StyleToolkitSettings = {
 	canvasTextCardLabelColorMode: "follow",
 	canvasTextCardLabelColor: "#c0c0c0",
 	canvasTextCardLabelMaxChars: 0,
+	canvasTextCardLabelCountMode: "width",
+	canvasTextCardStripMarkdown: true,
+	canvasTextCardStripLinks: true,
+	canvasTextCardStripTags: false,
 
 	kanbanScaleEnabled: true,
 	kanbanScale: 0.8,
@@ -682,6 +708,10 @@ export function normalizeSettings(
 	if (!COUNT_MODES.includes(out.canvasPlaceholderCountMode as string)) {
 		out.canvasPlaceholderCountMode =
 			DEFAULT_SETTINGS.canvasPlaceholderCountMode;
+	}
+	if (!COUNT_MODES.includes(out.canvasTextCardLabelCountMode as string)) {
+		out.canvasTextCardLabelCountMode =
+			DEFAULT_SETTINGS.canvasTextCardLabelCountMode;
 	}
 	if (
 		!PLACEHOLDER_COLOR_MODES.includes(

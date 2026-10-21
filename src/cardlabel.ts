@@ -34,8 +34,9 @@
 import type { App } from "obsidian";
 import {
 	displayFileName,
-	truncateText,
+	firstLineOf,
 	type FileNameLabelOptions,
+	type TextLabelOptions,
 } from "./filenames";
 
 /** Class on the label element this module inserts. */
@@ -68,7 +69,7 @@ interface CanvasLike {
 /** What the labeller has been asked to do. */
 export interface LabelOptions {
 	/** Text-card labels, or `null` when that feature is off. */
-	textCards: { maxChars: number } | null;
+	textCards: TextLabelOptions | null;
 	/** File-name rewriting, or `null` when nothing would change. */
 	fileNames: FileNameLabelOptions | null;
 }
@@ -97,51 +98,20 @@ function nodeType(node: CanvasNodeLike): unknown {
 }
 
 /**
- * Cuts the first line down to `maxChars` code points.
- *
- * Delegates to {@link truncateText} in `"chars"` mode, which counts code points
- * rather than UTF-16 units, so an emoji is kept or dropped whole. (Text cards
- * deliberately count characters, not widths: a card's first line is prose, and
- * "show 5 characters" is the unit a reader expects there. The file-name label
- * offers width counting instead, because names are mixed with extensions.)
- *
- * @param text - The already-extracted first line.
- * @param maxChars - Character limit; `0` or negative means "no limit".
- * @returns The text, shortened if a positive limit was given.
- */
-function clip(text: string, maxChars: number): string {
-	return truncateText(text, maxChars, "chars");
-}
-
-/**
- * Extracts the label text from a card's Markdown source.
- *
- * The first line that has anything on it wins, so a card that starts with a
- * blank line still gets a label. A leading ATX heading marker is dropped --
- * `# 项目计划` should read `项目计划`, since the `#` is syntax rather than
- * content -- while everything else is left exactly as typed.
- *
- * @param raw - The card's Markdown source.
- * @param maxChars - Optional character limit; `0` means "the whole first line".
- * @returns The label text, or `""` when the card has no text at all.
- */
-export function firstLineOf(raw: string, maxChars = 0): string {
-	for (const line of raw.split("\n")) {
-		const collapsed = line.replace(/\s+/gu, " ").trim();
-		const withoutMarker = collapsed.replace(/^#{1,6}[ \t]+/u, "").trim();
-		if (withoutMarker.length > 0) return clip(withoutMarker, maxChars);
-	}
-	return "";
-}
-
-/**
  * Reads a node's label text, but only if it is a text card.
  *
+ * The Markdown handling lives in `filenames.ts`, where it can be tested without
+ * Obsidian: block markers, links, emphasis runs and tags are stripped according
+ * to the filters, and only then is the text shortened.
+ *
  * @param node - Candidate Canvas node.
- * @param maxChars - Optional character limit; `0` means "the whole first line".
- * @returns The first line of the card, or `""` for any other node type.
+ * @param options - Budget, counting rule and filters.
+ * @returns The label text, or `""` for any other node type.
  */
-export function textCardLabel(node: CanvasNodeLike, maxChars = 0): string {
+export function textCardLabel(
+	node: CanvasNodeLike,
+	options: TextLabelOptions
+): string {
 	let type: unknown;
 	let text: unknown;
 	let typeKnown = false;
@@ -162,9 +132,7 @@ export function textCardLabel(node: CanvasNodeLike, maxChars = 0): string {
 		return "";
 	}
 	const source = typeof text === "string" ? text : node.text;
-	return typeof source === "string"
-		? firstLineOf(source, maxChars)
-		: "";
+	return typeof source === "string" ? firstLineOf(source, options) : "";
 }
 
 /**
@@ -360,7 +328,7 @@ export class CardLabeler {
 	 */
 	private applyTextCard(node: CanvasNodeLike, placeholder: HTMLElement): void {
 		const limits = this.options.textCards;
-		const text = limits ? textCardLabel(node, limits.maxChars) : "";
+		const text = limits ? textCardLabel(node, limits) : "";
 		const existing = placeholder.querySelector(
 			`:scope > .${LABEL_CLASS}`
 		) as HTMLElement | null;

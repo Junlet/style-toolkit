@@ -94,6 +94,52 @@ function displayFileName(name, options) {
     options.countMode
   );
 }
+var BLOCK_MARKERS = /^(?:>[ \t]*|#{1,6}[ \t]+|[-*+][ \t]+|\d+[.)][ \t]+|\[[ xX]\](?:[ \t]+|$))+/u;
+function stripEmphasisRuns(text) {
+  return text.replace(
+    /[*_~=`]+/gu,
+    (match, offset, whole) => {
+      var _a;
+      const before = offset > 0 ? whole[offset - 1] : " ";
+      const after = (_a = whole[offset + match.length]) != null ? _a : " ";
+      const insideWord = !/\s/u.test(before) && !/\s/u.test(after);
+      return insideWord ? match : "";
+    }
+  );
+}
+function stripBlockMarkers(text) {
+  return text.replace(BLOCK_MARKERS, "").trim();
+}
+function stripLinkSyntax(text) {
+  return text.replace(
+    /!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/gu,
+    (_match, _target, alias) => alias != null ? alias : ""
+  ).replace(
+    /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/gu,
+    (_match, target, alias) => alias != null ? alias : target.split("#")[0]
+  ).replace(/!?\[([^\]]*)\]\([^)]*\)/gu, "$1");
+}
+function stripTagSyntax(text) {
+  return text.replace(/(^|\s)#[^\s#]+/gu, "$1");
+}
+function cleanLabelLine(line, filters) {
+  let text = line.replace(/\s+/gu, " ").trim();
+  if (text.length === 0) return "";
+  if (filters.markdown) text = stripBlockMarkers(text);
+  if (filters.links) text = stripLinkSyntax(text);
+  if (filters.markdown) text = stripEmphasisRuns(text);
+  if (filters.tags) text = stripTagSyntax(text);
+  return text.replace(/\s+/gu, " ").trim();
+}
+function firstLineOf(raw, options) {
+  for (const line of raw.split("\n")) {
+    const cleaned = cleanLabelLine(line, options.filters);
+    if (cleaned.length > 0) {
+      return truncateText(cleaned, options.maxChars, options.countMode);
+    }
+  }
+  return "";
+}
 
 // src/cardlabel.ts
 var LABEL_CLASS = "stk-card-label";
@@ -108,18 +154,7 @@ function nodeType(node) {
     return void 0;
   }
 }
-function clip(text, maxChars) {
-  return truncateText(text, maxChars, "chars");
-}
-function firstLineOf(raw, maxChars = 0) {
-  for (const line of raw.split("\n")) {
-    const collapsed = line.replace(/\s+/gu, " ").trim();
-    const withoutMarker = collapsed.replace(/^#{1,6}[ \t]+/u, "").trim();
-    if (withoutMarker.length > 0) return clip(withoutMarker, maxChars);
-  }
-  return "";
-}
-function textCardLabel(node, maxChars = 0) {
+function textCardLabel(node, options) {
   let type;
   let text;
   let typeKnown = false;
@@ -138,7 +173,7 @@ function textCardLabel(node, maxChars = 0) {
     return "";
   }
   const source = typeof text === "string" ? text : node.text;
-  return typeof source === "string" ? firstLineOf(source, maxChars) : "";
+  return typeof source === "string" ? firstLineOf(source, options) : "";
 }
 function isCanvasLike(value) {
   if (!value || typeof value !== "object") return false;
@@ -282,7 +317,7 @@ var CardLabeler = class {
    */
   applyTextCard(node, placeholder) {
     const limits = this.options.textCards;
-    const text = limits ? textCardLabel(node, limits.maxChars) : "";
+    const text = limits ? textCardLabel(node, limits) : "";
     const existing = placeholder.querySelector(
       `:scope > .${LABEL_CLASS}`
     );
@@ -1402,6 +1437,10 @@ var DEFAULT_SETTINGS = {
   canvasTextCardLabelColorMode: "follow",
   canvasTextCardLabelColor: "#c0c0c0",
   canvasTextCardLabelMaxChars: 0,
+  canvasTextCardLabelCountMode: "width",
+  canvasTextCardStripMarkdown: true,
+  canvasTextCardStripLinks: true,
+  canvasTextCardStripTags: false,
   kanbanScaleEnabled: true,
   kanbanScale: 0.8
 };
@@ -1508,6 +1547,9 @@ function normalizeSettings(stored) {
   }
   if (!COUNT_MODES.includes(out.canvasPlaceholderCountMode)) {
     out.canvasPlaceholderCountMode = DEFAULT_SETTINGS.canvasPlaceholderCountMode;
+  }
+  if (!COUNT_MODES.includes(out.canvasTextCardLabelCountMode)) {
+    out.canvasTextCardLabelCountMode = DEFAULT_SETTINGS.canvasTextCardLabelCountMode;
   }
   if (!PLACEHOLDER_COLOR_MODES.includes(
     out.canvasTextCardLabelColorMode
@@ -2385,6 +2427,34 @@ function uiRows() {
     },
     {
       kind: "dropdown",
+      key: "canvasTextCardLabelCountMode",
+      name: "字数怎么算",
+      desc: "和文件名那一项同一套规则：默认按显示宽度（汉字算 2、英文算 1），混排截断后看起来才等长；选「每个字都算 1」则中英文一视同仁。",
+      options: [
+        { value: "width", label: "按显示宽度（中文算 2）" },
+        { value: "chars", label: "每个字都算 1" }
+      ]
+    },
+    {
+      kind: "toggle",
+      key: "canvasTextCardStripMarkdown",
+      name: "去掉 Markdown 标记",
+      desc: "行首的标题 #、列表 -、引用 >、任务框，以及强调 * _、行内代码、删除线 ~~、高亮 ==。这样 `* **初代` 显示成「初代」。夹在字中间的 _ 和 * 不动（snake_case、2*3 保持原样）。"
+    },
+    {
+      kind: "toggle",
+      key: "canvasTextCardStripLinks",
+      name: "链接只留文字",
+      desc: "[[笔记]] / [[笔记|别名]] 取笔记或别名，[文字](网址) 取文字；图片等嵌入（![[...]]）整段去掉 —— 文件名在缩略标签里只是噪音。"
+    },
+    {
+      kind: "toggle",
+      key: "canvasTextCardStripTags",
+      name: "去掉 #标签",
+      desc: "只去掉行首或空格后面的 #标签，所以 C# 这类写法不受影响。"
+    },
+    {
+      kind: "dropdown",
       key: "canvasTextCardLabelColorMode",
       name: "文本卡片文字颜色",
       desc: "「跟随卡片颜色」读的是节点上的 --canvas-color，所以预设色和自定义色都能跟上。",
@@ -2568,7 +2638,15 @@ var StyleToolkitPlugin = class extends import_obsidian3.Plugin {
    */
   syncCardLabels() {
     if (!this.cardLabeler) return;
-    const textCards = this.settings.canvasTextCardLabelEnabled ? { maxChars: this.settings.canvasTextCardLabelMaxChars } : null;
+    const textCards = this.settings.canvasTextCardLabelEnabled ? {
+      maxChars: this.settings.canvasTextCardLabelMaxChars,
+      countMode: this.settings.canvasTextCardLabelCountMode,
+      filters: {
+        markdown: this.settings.canvasTextCardStripMarkdown,
+        links: this.settings.canvasTextCardStripLinks,
+        tags: this.settings.canvasTextCardStripTags
+      }
+    } : null;
     const suffixes = parseSuffixList(
       this.settings.canvasPlaceholderStripSuffixes
     );
